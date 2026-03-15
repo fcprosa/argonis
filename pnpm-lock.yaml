@@ -46,19 +46,6 @@ importers:
         specifier: '*'
         version: 5.9.3
 
-  packages/agent:
-    dependencies:
-      '@argonis/db':
-        specifier: workspace:*
-        version: link:../db
-      '@argonis/shared':
-        specifier: workspace:*
-        version: link:../shared
-    devDependencies:
-      typescript:
-        specifier: '*'
-        version: 5.9.3
-
   packages/db:
     dependencies:
       '@argonis/shared':
