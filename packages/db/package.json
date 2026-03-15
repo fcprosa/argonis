@@ -1,0 +1,29 @@
+{
+  "name": "@argonis/db",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "db:generate": "supabase gen types typescript --local > src/database.types.ts",
+    "db:push": "supabase db push",
+    "db:reset": "supabase db reset"
+  },
+  "dependencies": {
+    "@argonis/shared": "workspace:*",
+    "@supabase/supabase-js": "^2.47.10"
+  },
+  "devDependencies": {
+    "typescript": "*",
+    "supabase": "^2.0.0"
+  }
+}
