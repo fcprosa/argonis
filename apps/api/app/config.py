@@ -15,5 +15,15 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # Anthropic (Claude)
+    anthropic_api_key: str = ""
+
+    # OpenSanctions
+    opensanctions_api_key: str = ""
+
+    # Google Custom Search (adverse media)
+    google_cse_api_key: str = ""  # Google API key
+    google_cse_id: str = ""       # Custom Search Engine ID
+
 
 settings = Settings()
