@@ -38,7 +38,8 @@ def parse_alert(raw: dict[str, Any]) -> ParsedAlert:
     This is a pure function — same input always produces same output.
     Raises ValueError if required fields are missing or unparseable.
     """
-    transactions = _parse_transactions(raw.get("transactions", []))
+    alert_id = str(raw.get("alert_id", "alert"))
+    transactions = _parse_transactions(raw.get("transactions", []), alert_id=alert_id)
     bo_raw = str(raw.get("beneficial_owner", ""))
     bo_name, nationality, dob = _parse_beneficial_owner(bo_raw)
 
@@ -86,7 +87,7 @@ def parse_alert(raw: dict[str, Any]) -> ParsedAlert:
 # ---------------------------------------------------------------------------
 
 
-def _parse_transactions(raw_txns: Any) -> list[ParsedTransaction]:
+def _parse_transactions(raw_txns: Any, alert_id: str = "alert") -> list[ParsedTransaction]:
     if isinstance(raw_txns, str):
         try:
             raw_txns = json.loads(raw_txns)
@@ -97,7 +98,7 @@ def _parse_transactions(raw_txns: Any) -> list[ParsedTransaction]:
         return []
 
     result: list[ParsedTransaction] = []
-    for txn in raw_txns:
+    for i, txn in enumerate(raw_txns):
         if not isinstance(txn, dict):
             continue
         try:
@@ -113,6 +114,7 @@ def _parse_transactions(raw_txns: Any) -> list[ParsedTransaction]:
 
         result.append(
             ParsedTransaction(
+                txn_id=f"{alert_id}-txn-{i:03d}",
                 date=txn_date,
                 amount=amount,
                 currency=str(txn.get("currency", "")).upper(),

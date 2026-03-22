@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     # Supabase
     supabase_url: str = ""
     supabase_service_key: str = ""
+    supabase_jwt_secret: str = ""  # For local JWT verification (HS256)
 
     # CORS
     cors_origins: list[str] = ["http://localhost:3000"]
@@ -21,9 +22,8 @@ class Settings(BaseSettings):
     # OpenSanctions
     opensanctions_api_key: str = ""
 
-    # Google Custom Search (adverse media)
-    google_cse_api_key: str = ""  # Google API key
-    google_cse_id: str = ""       # Custom Search Engine ID
+    # Serper.dev (adverse media search)
+    serper_api_key: str = ""  # https://serper.dev — Google search API
 
 
 settings = Settings()

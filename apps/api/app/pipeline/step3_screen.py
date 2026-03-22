@@ -8,7 +8,7 @@ Screening sources (in order of priority):
   1. OFAC SDN (free — fuzzy match against downloaded list in Supabase)
   2. OpenSanctions API (UN, EU, UK, 40+ lists — with caching)
   3. Adverse media keyword detection (from alert's own screening fields)
-  4. Google Custom Search adverse media (when configured)
+  4. Serper.dev adverse media search (when configured)
   5. Stub path when no API keys are configured
 
 All results are factual — confidence scores reflect actual match scores,

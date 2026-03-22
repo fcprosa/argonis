@@ -1,7 +1,9 @@
 """
-Adverse media search — Google Custom Search API + Claude summarization.
+Adverse media search — Serper.dev API + Claude summarization.
 
-Google Custom Search API: $5/1000 queries.
+Serper.dev (https://serper.dev) provides Google search results via a simple
+REST API.  Endpoint: POST https://google.serper.dev/search (or /news).
+
 Budget constraint: 3-5 queries per investigation, max.
 
 Targeted queries:
@@ -31,7 +33,8 @@ from app.screening.models import AdverseMediaArticle, AdverseMediaResponse
 
 logger = logging.getLogger(__name__)
 
-GOOGLE_CSE_URL = "https://www.googleapis.com/customsearch/v1"
+SERPER_SEARCH_URL = "https://google.serper.dev/search"
+SERPER_NEWS_URL = "https://google.serper.dev/news"
 
 # Targeted query templates — these are the AML-specific searches
 _QUERY_TEMPLATES = [
@@ -43,50 +46,82 @@ _QUERY_TEMPLATES = [
 ]
 
 MAX_QUERIES_PER_INVESTIGATION = 5
-MAX_RESULTS_PER_QUERY = 3  # Google CSE returns up to 10, we take top 3
+MAX_RESULTS_PER_QUERY = 3  # Serper returns up to 100; we take top 3
 
 
 # ---------------------------------------------------------------------------
-# Google Custom Search
+# Serper.dev Search
 # ---------------------------------------------------------------------------
 
 
-async def _search_google(
+async def _search_serper(
     query: str,
     api_key: str,
-    cse_id: str,
     num_results: int = MAX_RESULTS_PER_QUERY,
     timeout: float = 10.0,
 ) -> list[dict[str, Any]]:
-    """Execute a single Google Custom Search query."""
-    params = {
-        "key": api_key,
-        "cx": cse_id,
+    """Execute a single search query via the Serper.dev API.
+
+    Hits both the regular search and news endpoints, deduplicates by URL,
+    and returns a merged list of results.
+    """
+    headers = {
+        "X-API-KEY": api_key,
+        "Content-Type": "application/json",
+    }
+    payload: dict[str, Any] = {
         "q": query,
         "num": min(num_results, 10),
-        "dateRestrict": "y5",  # Last 5 years for relevance
-        "safe": "off",  # Don't filter — we need to find negative news
+        "tbs": "qdr:y5",  # Last 5 years for relevance
     }
 
-    try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.get(GOOGLE_CSE_URL, params=params)
+    articles: list[dict[str, Any]] = []
+    seen_urls: set[str] = set()
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        # --- Regular web search ---
+        try:
+            response = await client.post(
+                SERPER_SEARCH_URL, json=payload, headers=headers,
+            )
             response.raise_for_status()
             data: dict[str, Any] = response.json()
-    except httpx.HTTPError as exc:
-        logger.error("Google CSE error for query '%s': %s", query, exc)
-        return []
 
-    items = data.get("items", [])
-    return [
-        {
-            "url": item.get("link", ""),
-            "title": item.get("title", ""),
-            "snippet": item.get("snippet", ""),
-        }
-        for item in items
-        if item.get("link")
-    ]
+            for item in data.get("organic", [])[:num_results]:
+                url = item.get("link", "")
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    articles.append({
+                        "url": url,
+                        "title": item.get("title", ""),
+                        "snippet": item.get("snippet", ""),
+                    })
+        except httpx.HTTPError as exc:
+            logger.error("Serper web search error for query '%s': %s", query, exc)
+
+        # --- News search (often surfaces more relevant AML/sanctions articles) ---
+        try:
+            news_payload = {**payload}
+            news_payload.pop("tbs", None)  # tbs not supported on /news
+            news_response = await client.post(
+                SERPER_NEWS_URL, json=news_payload, headers=headers,
+            )
+            news_response.raise_for_status()
+            news_data: dict[str, Any] = news_response.json()
+
+            for item in news_data.get("news", [])[:num_results]:
+                url = item.get("link", "")
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    articles.append({
+                        "url": url,
+                        "title": item.get("title", ""),
+                        "snippet": item.get("snippet", ""),
+                    })
+        except httpx.HTTPError as exc:
+            logger.error("Serper news search error for query '%s': %s", query, exc)
+
+    return articles
 
 
 # ---------------------------------------------------------------------------
@@ -215,7 +250,7 @@ async def _store_adverse_media(
             "article_snippet": article.snippet,
             "relevance_score": article.relevance_score,
             "claude_summary": article.claude_summary,
-            "search_engine": "google_cse",
+            "search_engine": "serper",
         }
         if organization_id:
             row["organization_id"] = organization_id
@@ -235,8 +270,7 @@ async def _store_adverse_media(
 
 async def search_adverse_media(
     name: str,
-    google_api_key: str,
-    google_cse_id: str,
+    serper_api_key: str,
     anthropic_api_key: str | None = None,
     nationality: str | None = None,
     max_queries: int = MAX_QUERIES_PER_INVESTIGATION,
@@ -249,7 +283,7 @@ async def search_adverse_media(
     Search for adverse media about an entity.
 
     1. Build 3-5 targeted queries
-    2. Execute via Google Custom Search API
+    2. Execute via Serper.dev API (web search + news search)
     3. Deduplicate results
     4. Claude summarizes relevance
     5. Store article URLs in database
@@ -278,7 +312,7 @@ async def search_adverse_media(
     seen_urls: set[str] = set()
 
     for query in queries:
-        results = await _search_google(query, google_api_key, google_cse_id)
+        results = await _search_serper(query, serper_api_key)
         for result in results:
             url = result["url"]
             if url not in seen_urls:

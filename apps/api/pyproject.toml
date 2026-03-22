@@ -12,6 +12,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "anthropic>=0.50.0",
     "httpx>=0.28.0",
+    "PyJWT>=2.9.0",
 ]
 
 [project.optional-dependencies]

@@ -74,7 +74,7 @@ CREATE TABLE adverse_media_results (
     article_snippet TEXT,
     relevance_score FLOAT       CHECK (relevance_score BETWEEN 0 AND 1),
     claude_summary  TEXT,       -- Claude's assessment of relevance
-    search_engine   TEXT        NOT NULL DEFAULT 'google_cse',
+    search_engine   TEXT        NOT NULL DEFAULT 'serper',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

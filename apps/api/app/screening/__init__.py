@@ -6,7 +6,7 @@ Entry point: screen(name, dob?, nationality?) → ScreeningResponse
 Aggregates results from:
   1. OFAC SDN (free, local fuzzy match against downloaded list)
   2. OpenSanctions (UN, EU, UK, 40+ lists — API with caching)
-  3. Adverse media (Google Custom Search + Claude summarization)
+  3. Adverse media (Serper.dev search + Claude summarization)
 
 Each result includes source_url and list_name.
 Cache results. Batch screen. Don't repeat API calls.

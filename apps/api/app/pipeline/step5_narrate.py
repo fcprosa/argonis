@@ -165,10 +165,11 @@ def build_evidence_package(
     for attr, label in pattern_fields:
         detection = getattr(analysis, attr)
         if detection.detected:
+            evidence_str = "; ".join(ev.detail for ev in detection.evidence)
             add(
                 "pattern",
                 f"Pattern detected: {label}",
-                f"confidence={detection.confidence:.0%}; evidence: {'; '.join(detection.evidence)}",
+                f"confidence={detection.confidence:.0%}; evidence: {evidence_str}",
                 "step4_analyze",
                 detection.confidence,
             )

@@ -56,7 +56,7 @@ The prompt for Step 5 explicitly instructs: "Do not include any information not 
 - **Database:** Supabase (PostgreSQL) — cases, audit logs, auth, row-level security
 - **Frontend:** Next.js 14 (App Router) — investigation dashboard, narrative editor
 - **Sanctions:** OFAC SDN (free), OpenSanctions (40+ global lists)
-- **Media:** Google Custom Search API — adverse media detection
+- **Media:** Serper.dev API — adverse media detection (Google search results)
 - **Infra:** Vercel (frontend) + Railway (backend), auto-deploy on push
 
 ## Key Database Tables

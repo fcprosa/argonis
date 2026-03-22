@@ -14,7 +14,7 @@ import pytest
 from app.pipeline.step1_parse import parse_alert
 from app.pipeline.step3_screen import (
     _extract_entity_names,
-    _screen_adverse_media,
+    _screen_adverse_media_keywords as _screen_adverse_media,
     screen_entities,
 )
 

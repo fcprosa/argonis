@@ -114,21 +114,20 @@ async def search_media(req: AdverseMediaRequest) -> AdverseMediaResponse:
     """
     Search for adverse media about an entity.
 
-    Uses Google Custom Search API ($5/1000 queries).
+    Uses Serper.dev API (Google search results).
     Limit: 3-5 queries per investigation.
     Claude summarizes relevance of each article.
     Stores article URLs — analysts MUST click through and verify.
     """
-    if not settings.google_cse_api_key or not settings.google_cse_id:
+    if not settings.serper_api_key:
         raise HTTPException(
             status_code=503,
-            detail="Google Custom Search not configured (GOOGLE_CSE_API_KEY and GOOGLE_CSE_ID required)",
+            detail="Serper.dev not configured (SERPER_API_KEY required)",
         )
 
     return await search_adverse_media(
         name=req.name,
-        google_api_key=settings.google_cse_api_key,
-        google_cse_id=settings.google_cse_id,
+        serper_api_key=settings.serper_api_key,
         anthropic_api_key=settings.anthropic_api_key or None,
         nationality=req.nationality,
         max_queries=req.max_queries,

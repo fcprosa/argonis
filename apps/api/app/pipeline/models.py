@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ParsedTransaction(BaseModel):
+    txn_id: str = ""  # e.g. "AML-2026-00147-txn-000" — set by parse_alert
     date: date
     amount: Decimal
     currency: str
@@ -124,10 +125,25 @@ class ScreeningBundle(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class EvidenceFact(BaseModel):
+    """
+    A single piece of evidence produced by a deterministic pattern detector.
+
+    For transaction evidence: txn_id, amount, and date are all set.
+    For entity/account evidence (e.g. geographic risk): amount and date are None
+    and txn_id carries a semantic identifier like "entity:RU" or "account:new_47d".
+    """
+
+    txn_id: str  # e.g. "AML-2026-00147-txn-000" or "entity:RU"
+    amount: Decimal | None = None
+    date: str | None = None  # ISO 8601
+    detail: str  # human-readable explanation of why this is suspicious
+
+
 class PatternDetection(BaseModel):
     detected: bool
     confidence: float = Field(ge=0.0, le=1.0)
-    evidence: list[str]
+    evidence: list[EvidenceFact]
 
 
 class AnalysisResult(BaseModel):
