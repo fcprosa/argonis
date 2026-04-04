@@ -1,11 +1,330 @@
-import { HealthCheck } from "./health-check";
+import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Argonis — AML Investigation Platform",
+  description:
+    "From alert to SAR narrative in 60 seconds. Evidence-first architecture: every sentence traces to a verified data source.",
+};
+
+// ---------------------------------------------------------------------------
+// Accent colour used throughout
+// ---------------------------------------------------------------------------
+const Y = "#E8FF4D"; // yellow-green accent
 
 export default function HomePage() {
   return (
-    <main style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: "600px", margin: "0 auto" }}>
-      <h1 style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>Argonis</h1>
-      <p style={{ color: "#666", marginBottom: "2rem" }}>AI Agent Platform</p>
-      <HealthCheck />
-    </main>
+    <div
+      style={{ backgroundColor: "#0A0A0A", color: "#FFFFFF" }}
+      className="min-h-screen font-sans antialiased"
+    >
+      {/* ── Nav ─────────────────────────────────────────────────────────── */}
+      <nav
+        style={{ borderBottom: "1px solid #1F1F1F" }}
+        className="flex h-14 items-center justify-between px-8 sticky top-0 z-10"
+        aria-label="Main navigation"
+      >
+        <span
+          className="text-sm font-semibold tracking-widest uppercase"
+          style={{ color: "#FFFFFF" }}
+        >
+          ARGONIS
+        </span>
+        <div className="flex items-center gap-6">
+          <Link
+            href="/dashboard"
+            className="text-xs font-medium transition-colors"
+            style={{ color: "#9CA3AF" }}
+          >
+            Dashboard
+          </Link>
+          <Link
+            href="/dashboard"
+            className="rounded px-4 py-2 text-xs font-semibold transition-opacity hover:opacity-90"
+            style={{ backgroundColor: Y, color: "#0A0A0A" }}
+          >
+            Live Demo →
+          </Link>
+        </div>
+      </nav>
+
+      {/* ── Hero ────────────────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-5xl px-8 pt-24 pb-20">
+        <div
+          className="mb-6 inline-block rounded px-3 py-1 text-xs font-semibold tracking-wider uppercase"
+          style={{ backgroundColor: "#1A1A1A", color: Y }}
+        >
+          AML · Compliance · RegTech
+        </div>
+
+        <h1
+          className="text-5xl font-bold leading-tight tracking-tight mb-6"
+          style={{ maxWidth: "720px" }}
+        >
+          AML Investigations:{" "}
+          <span style={{ color: Y }}>From Alert to Narrative</span>{" "}
+          in 60 Seconds
+        </h1>
+
+        <p
+          className="text-lg leading-relaxed mb-10"
+          style={{ color: "#9CA3AF", maxWidth: "560px" }}
+        >
+          Every fact in the narrative traces to a verified data source.
+          Zero hallucination by design.
+        </p>
+
+        <div className="flex items-center gap-4">
+          <Link
+            href="/dashboard"
+            className="rounded px-6 py-3 text-sm font-semibold transition-opacity hover:opacity-90"
+            style={{ backgroundColor: Y, color: "#0A0A0A" }}
+          >
+            See Live Demo →
+          </Link>
+          <a
+            href="https://calendly.com/argonis/demo"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded border px-6 py-3 text-sm font-medium transition-colors hover:border-white"
+            style={{ borderColor: "#333333", color: "#9CA3AF" }}
+          >
+            Book a Demo
+          </a>
+        </div>
+      </section>
+
+      {/* ── Divider ─────────────────────────────────────────────────────── */}
+      <div style={{ borderTop: "1px solid #1A1A1A" }} />
+
+      {/* ── Problem stats ───────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-5xl px-8 py-20">
+        <p
+          className="text-xs font-semibold tracking-widest uppercase mb-12"
+          style={{ color: "#555555" }}
+        >
+          The AML Investigation Crisis
+        </p>
+
+        <div className="grid grid-cols-3 gap-0">
+          {[
+            {
+              stat: "$8.8B",
+              label: "fines issued to financial institutions for AML failures in 2023",
+            },
+            {
+              stat: "95%",
+              label: "of AML alerts are false positives, consuming analyst time on noise",
+            },
+            {
+              stat: "21 hrs",
+              label: "average time to complete one SAR investigation end-to-end",
+            },
+          ].map(({ stat, label }, i) => (
+            <div
+              key={i}
+              className="pr-10"
+              style={{
+                borderLeft: i > 0 ? "1px solid #1F1F1F" : undefined,
+                paddingLeft: i > 0 ? "2.5rem" : undefined,
+              }}
+            >
+              <div
+                className="text-5xl font-bold tracking-tight mb-3"
+                style={{ color: Y }}
+              >
+                {stat}
+              </div>
+              <p className="text-sm leading-relaxed" style={{ color: "#6B7280" }}>
+                {label}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div style={{ borderTop: "1px solid #1A1A1A" }} />
+
+      {/* ── Differentiators ─────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-5xl px-8 py-20">
+        <p
+          className="text-xs font-semibold tracking-widest uppercase mb-12"
+          style={{ color: "#555555" }}
+        >
+          Built different. Here&apos;s why.
+        </p>
+
+        <div className="grid grid-cols-3 gap-10">
+          {[
+            {
+              title: "Evidence-first architecture",
+              body: "The LLM writes prose. Python code detects patterns. Every sentence maps to a real data source — investigation step, OFAC hit, or transaction record. Nothing is invented.",
+            },
+            {
+              title: "European compliance ready",
+              body: "AMLD6, FATF, PSD2. Built for EMIs, payment processors, and challenger banks expanding in the EU. SAR output follows JMLSG and EBA guidelines out of the box.",
+            },
+            {
+              title: "Analysts in control",
+              body: "Per-section approval. Inline evidence links. Confidence scores on every finding. Regulators can audit every decision. Human sign-off is never optional.",
+            },
+          ].map(({ title, body }, i) => (
+            <div key={i}>
+              <div
+                className="w-8 h-px mb-5"
+                style={{ backgroundColor: Y }}
+              />
+              <h3
+                className="text-sm font-semibold mb-3"
+                style={{ color: "#FFFFFF" }}
+              >
+                {title}
+              </h3>
+              <p className="text-sm leading-relaxed" style={{ color: "#6B7280" }}>
+                {body}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div style={{ borderTop: "1px solid #1A1A1A" }} />
+
+      {/* ── How it works ────────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-5xl px-8 py-20">
+        <p
+          className="text-xs font-semibold tracking-widest uppercase mb-12"
+          style={{ color: "#555555" }}
+        >
+          How it works
+        </p>
+
+        <div className="grid grid-cols-4 gap-0">
+          {[
+            {
+              n: "01",
+              icon: "↑",
+              title: "Upload alert",
+              body: "CSV batch or REST API. Accepts any alert format — structuring, sanctions, velocity, TBML.",
+            },
+            {
+              n: "02",
+              icon: "⬡",
+              title: "Agent investigates",
+              body: "Screens OFAC SDN, OpenSanctions, adverse media. Detects transaction patterns. Gathers KYC context.",
+            },
+            {
+              n: "03",
+              icon: "▤",
+              title: "Narrative generated",
+              body: "Each sentence is anchored to a verified evidence source. No free-form generation.",
+            },
+            {
+              n: "04",
+              icon: "✓",
+              title: "Analyst approves",
+              body: "Review section by section. Accept, reject, or edit. Confidence scores visible throughout.",
+            },
+          ].map(({ n, icon, title, body }, i) => (
+            <div
+              key={i}
+              className="pr-8"
+              style={{
+                borderLeft: i > 0 ? "1px solid #1F1F1F" : undefined,
+                paddingLeft: i > 0 ? "2rem" : undefined,
+              }}
+            >
+              <div
+                className="text-xs font-mono mb-4"
+                style={{ color: "#333333" }}
+              >
+                {n}
+              </div>
+              <div
+                className="text-2xl mb-4"
+                style={{ color: Y }}
+              >
+                {icon}
+              </div>
+              <h3
+                className="text-sm font-semibold mb-2"
+                style={{ color: "#FFFFFF" }}
+              >
+                {title}
+              </h3>
+              <p className="text-xs leading-relaxed" style={{ color: "#6B7280" }}>
+                {body}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div style={{ borderTop: "1px solid #1A1A1A" }} />
+
+      {/* ── Competitor callout ───────────────────────────────────────────── */}
+      <section className="mx-auto max-w-5xl px-8 py-20">
+        <div
+          className="rounded-lg p-8"
+          style={{ backgroundColor: "#111111", border: "1px solid #1F1F1F" }}
+        >
+          <p
+            className="text-xs font-semibold tracking-widest uppercase mb-4"
+            style={{ color: "#555555" }}
+          >
+            Why not Greenlite, Lucinity, or Nasdaq Verafin?
+          </p>
+          <p
+            className="text-xl font-semibold leading-snug"
+            style={{ color: "#FFFFFF", maxWidth: "640px" }}
+          >
+            They generate narratives from{" "}
+            <span style={{ color: "#EF4444" }}>LLM imagination</span>.
+            {" "}We build them from{" "}
+            <span style={{ color: Y }}>verified evidence</span>.
+            {" "}The difference is auditability.
+          </p>
+        </div>
+      </section>
+
+      <div style={{ borderTop: "1px solid #1A1A1A" }} />
+
+      {/* ── Final CTA ───────────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-5xl px-8 py-24 text-center">
+        <h2
+          className="text-4xl font-bold tracking-tight mb-4"
+        >
+          Ready to see it?
+        </h2>
+        <p
+          className="text-sm mb-10"
+          style={{ color: "#6B7280" }}
+        >
+          No sign-up required. Full demo data included.
+        </p>
+        <Link
+          href="/dashboard"
+          className="inline-block rounded px-8 py-4 text-sm font-semibold transition-opacity hover:opacity-90"
+          style={{ backgroundColor: Y, color: "#0A0A0A" }}
+        >
+          Try the live demo →
+        </Link>
+      </section>
+
+      {/* ── Footer ──────────────────────────────────────────────────────── */}
+      <footer
+        style={{ borderTop: "1px solid #1A1A1A" }}
+        className="px-8 py-8"
+      >
+        <div className="mx-auto max-w-5xl flex items-center justify-between">
+          <p className="text-xs" style={{ color: "#333333" }}>
+            Argonis — AML Investigation Platform · Built for European compliance
+          </p>
+          <p className="text-xs" style={{ color: "#333333" }}>
+            © 2026
+          </p>
+        </div>
+      </footer>
+    </div>
   );
 }
