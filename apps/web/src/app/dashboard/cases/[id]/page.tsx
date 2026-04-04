@@ -133,6 +133,10 @@ export default function CaseDetailPage({
   // ---------------------------------------------------------------------------
   async function handleExportPdf() {
     if (!narrative) return;
+    if (demoMode) {
+      setExportError("Demo mode — PDF export requires live API");
+      return;
+    }
     setExportingPdf(true);
     setExportError(null);
     try {
