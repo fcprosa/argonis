@@ -109,15 +109,19 @@ function buildAlerts(
     };
 
     const scoreRaw = get("risk_score");
-    const score = scoreRaw != null ? parseFloat(scoreRaw) : undefined;
+    const caseId    = get("case_id");
+    const status    = get("status");
+    const createdAt = get("created_at");
+    const score     = scoreRaw != null ? parseFloat(scoreRaw) : undefined;
+    const validScore = score != null && !isNaN(score) ? score : undefined;
 
     return {
-      case_id:       get("case_id"),
       customer_name: get("customer_name") ?? "Unknown",
       alert_type:    get("alert_type") ?? "Unknown",
-      risk_score:    score != null && !isNaN(score) ? score : undefined,
-      status:        get("status"),
-      created_at:    get("created_at"),
+      ...(caseId    !== undefined && { case_id:    caseId }),
+      ...(validScore !== undefined && { risk_score: validScore }),
+      ...(status    !== undefined && { status }),
+      ...(createdAt !== undefined && { created_at: createdAt }),
     };
   });
 }
