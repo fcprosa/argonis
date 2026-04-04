@@ -1,9 +1,10 @@
 """
 Alert endpoints.
 
-POST /alerts        — Create a single alert
-POST /alerts/batch  — Batch upload alerts (max 100)
+POST /alerts        — Create a single alert (raw, for system use)
+POST /alerts/batch  — Batch import from CSV: creates cases directly
 GET  /alerts/{id}   — Get a single alert
+GET  /alerts        — List alerts
 
 All endpoints require Supabase JWT auth. All actions logged via DB triggers.
 """
@@ -30,15 +31,9 @@ router = APIRouter(prefix="/alerts", tags=["alerts"])
 class AlertCreate(BaseModel):
     title: str = Field(min_length=1, max_length=500)
     description: str | None = None
-    severity: str = Field(
-        default="medium", pattern="^(low|medium|high|critical)$"
-    )
+    severity: str = Field(default="medium", pattern="^(low|medium|high|critical)$")
     source: str = Field(min_length=1, max_length=200)
     raw_data: dict[str, Any] | None = None
-
-
-class AlertBatchCreate(BaseModel):
-    alerts: list[AlertCreate] = Field(min_length=1, max_length=100)
 
 
 class AlertResponse(BaseModel):
@@ -53,6 +48,29 @@ class AlertResponse(BaseModel):
     created_by: str | None = None
     created_at: str
     updated_at: str
+
+
+# Batch import schema — maps to what the CSV upload page sends.
+# Each item becomes a case row (not an alert row) so it appears in
+# the Alert Queue immediately after import.
+class AlertImport(BaseModel):
+    customer_name: str = Field(min_length=1, max_length=300)
+    alert_type: str = Field(min_length=1, max_length=200)
+    risk_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    status: str | None = Field(
+        default=None, pattern="^(open|in_review|escalated|closed)$"
+    )
+    created_at: str | None = None  # ISO 8601; omit to use DB default (NOW())
+    case_id: str | None = None  # external reference (e.g. "AML-2026-00201")
+
+
+class AlertBatchImport(BaseModel):
+    alerts: list[AlertImport] = Field(min_length=1, max_length=100)
+
+
+class BatchImportResponse(BaseModel):
+    imported: int
+    case_ids: list[str]
 
 
 # ---------------------------------------------------------------------------
@@ -83,40 +101,71 @@ async def create_alert(
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create alert")
 
-    return AlertResponse(**result.data[0])
+    return AlertResponse.model_validate(result.data[0])
 
 
 @router.post(
     "/batch",
-    response_model=list[AlertResponse],
+    response_model=BatchImportResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def batch_create_alerts(
-    body: AlertBatchCreate,
+async def batch_import_alerts(
+    body: AlertBatchImport,
     auth: AuthContext = Depends(get_current_user),
     _rl: None = Depends(rate_limit(10, 60)),
-) -> list[AlertResponse]:
-    """Batch upload alerts (max 100 per request)."""
+) -> BatchImportResponse:
+    """
+    Batch import alerts from CSV upload.
+
+    Each item is inserted as a ``cases`` row so it appears in the Alert Queue
+    immediately.  The optional ``case_id`` field is treated as an external
+    reference (e.g. "AML-2026-00201") and stored in the case description.
+    When not supplied, a sequential ``CASE-NNN`` reference is generated using
+    the org's current case count as the base.
+    """
     db = await get_service_db()
 
-    rows = [
-        {
+    # Count existing cases for this org so generated refs don't collide.
+    count_res = await (
+        db.table("cases")
+        .select("id", count="exact")  # type: ignore[call-arg]
+        .eq("organization_id", auth.organization_id)
+        .execute()
+    )
+    base = (count_res.count or 0) + 1
+
+    rows: list[dict[str, Any]] = []
+    for i, alert in enumerate(body.alerts):
+        ext_ref = alert.case_id or f"CASE-{base + i:03d}"
+
+        # Title follows the same convention as investigation-generated cases.
+        title = f"Investigation: {alert.alert_type} — {alert.customer_name}"
+
+        # Pack the external ref and risk score into description so they survive
+        # without a schema change.  Format: "[EXT-REF] | score: 0.92"
+        desc_parts: list[str] = [f"[{ext_ref}]"]
+        if alert.risk_score is not None:
+            desc_parts.append(f"score {alert.risk_score:.2f}")
+
+        row: dict[str, Any] = {
             "organization_id": auth.organization_id,
-            "title": a.title,
-            "description": a.description,
-            "severity": a.severity,
-            "source": a.source,
-            "raw_data": a.raw_data,
+            "title": title,
+            "description": " | ".join(desc_parts),
+            "status": alert.status or "open",
             "created_by": auth.user_id,
         }
-        for a in body.alerts
-    ]
+        if alert.created_at:
+            row["created_at"] = alert.created_at
 
-    result = await db.table("alerts").insert(rows).execute()
+        rows.append(row)
+
+    result = await db.table("cases").insert(rows).execute()
     if not result.data:
-        raise HTTPException(status_code=500, detail="Failed to create alerts")
+        raise HTTPException(status_code=500, detail="Failed to import alerts")
 
-    return [AlertResponse(**r) for r in result.data]
+    data: list[dict[str, Any]] = result.data  # type: ignore[assignment]
+    case_ids = [str(r["id"]) for r in data]
+    return BatchImportResponse(imported=len(case_ids), case_ids=case_ids)
 
 
 @router.get("/{alert_id}", response_model=AlertResponse)
@@ -140,7 +189,8 @@ async def get_alert(
     except Exception:
         raise HTTPException(status_code=404, detail="Alert not found")
 
-    return AlertResponse(**result.data)
+    alert_data: dict[str, Any] = result.data  # type: ignore[assignment]
+    return AlertResponse.model_validate(alert_data)
 
 
 @router.get("", response_model=list[AlertResponse])
@@ -167,4 +217,5 @@ async def list_alerts(
         query = query.eq("status", status_filter)
 
     result = await query.execute()
-    return [AlertResponse(**r) for r in (result.data or [])]
+    rows: list[dict[str, Any]] = result.data or []  # type: ignore[assignment]
+    return [AlertResponse.model_validate(r) for r in rows]
