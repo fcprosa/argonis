@@ -20,7 +20,7 @@ export default function HomePage() {
     >
       {/* ── Nav ─────────────────────────────────────────────────────────── */}
       <nav
-        style={{ borderBottom: "1px solid #1F1F1F" }}
+        style={{ backgroundColor: "#0A0A0A", borderBottom: "1px solid #1F1F1F" }}
         className="flex h-14 items-center justify-between px-8 sticky top-0 z-10"
         aria-label="Main navigation"
       >

@@ -156,7 +156,7 @@ export default function AlertQueuePage() {
                 return (
                   <tr
                     key={c.id}
-                    onClick={() => router.push(`/dashboard/cases/${c.id}`)}
+                    onClick={() => { window.location.href = `/dashboard/cases/${c.id}`; }}
                     className={[
                       "cursor-pointer border-b border-gray-100 transition-colors",
                       i % 2 === 0 ? "bg-white" : "bg-gray-50/50",

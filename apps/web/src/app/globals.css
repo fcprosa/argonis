@@ -8,7 +8,7 @@
   }
 
   body {
-    @apply bg-[#F8F8F8] text-gray-900 antialiased;
+    @apply text-gray-900 antialiased;
     font-feature-settings: "cv11", "ss01";
   }
 
