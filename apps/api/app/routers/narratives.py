@@ -8,13 +8,17 @@ POST /narratives/{id}/approve             — Per-section approval (reviewers on
 
 from __future__ import annotations
 
+import io
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.auth import AuthContext, get_current_user, require_role
 from app.db import get_service_db
+from app.pdf import build_narrative_pdf
 from app.ratelimit import rate_limit
 
 router = APIRouter(prefix="/narratives", tags=["narratives"])
@@ -131,6 +135,7 @@ async def get_narrative(
         .execute()
     )
 
+    sections_data: list[dict[str, Any]] = sections_result.data or []  # type: ignore[assignment]
     sections = [
         SectionResponse(
             id=s["id"],
@@ -142,10 +147,10 @@ async def get_narrative(
             approved_by=s.get("approved_by"),
             approved_at=s.get("approved_at"),
         )
-        for s in (sections_result.data or [])
+        for s in sections_data
     ]
 
-    n = nar.data
+    n: dict[str, Any] = nar.data  # type: ignore[assignment]
     return NarrativeDetailResponse(
         id=n["id"],
         case_id=n["case_id"],
@@ -153,7 +158,7 @@ async def get_narrative(
         title=n["title"],
         status=n["status"],
         sections=sections,
-        evidence_links=el_result.data or [],
+        evidence_links=el_result.data or [],  # type: ignore[arg-type]
         created_by=n["created_by"],
         created_at=n["created_at"],
         updated_at=n["updated_at"],
@@ -197,7 +202,8 @@ async def edit_section(
     except Exception:
         raise HTTPException(status_code=404, detail="Narrative not found")
 
-    if nar.data["status"] == "approved":
+    nar_data: dict[str, Any] = nar.data  # type: ignore[assignment]
+    if nar_data["status"] == "approved":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Cannot edit an approved narrative. Create a new version.",
@@ -225,7 +231,8 @@ async def edit_section(
             status_code=404, detail=f"Section '{section_key}' not found"
         )
 
-    s = section_result.data[0]
+    _raw_s: Any = (section_result.data or [None])[0]  # type: ignore[index]
+    s: dict[str, Any] = _raw_s
     return SectionResponse(
         id=s["id"],
         section_key=s["section_key"],
@@ -310,7 +317,8 @@ async def approve_narrative(
         .execute()
     )
 
-    statuses = [s["approval_status"] for s in (all_sections.data or [])]
+    all_sections_data: list[dict[str, Any]] = all_sections.data or []  # type: ignore[assignment]
+    statuses = [s["approval_status"] for s in all_sections_data]
 
     if all(s == "approved" for s in statuses):
         narrative_status = "approved"
@@ -336,4 +344,103 @@ async def approve_narrative(
             f"{len(updated_keys)} section(s) {body.action}d. "
             f"Narrative status: {narrative_status}."
         ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET  /narratives/{id}/export/pdf
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{narrative_id}/export/pdf")
+async def export_narrative_pdf(
+    narrative_id: str,
+    auth: AuthContext = Depends(get_current_user),
+    _rl: None = Depends(rate_limit(20, 60)),
+) -> StreamingResponse:
+    """
+    Export a narrative as a PDF document.
+
+    Returns an A4 PDF with letterhead, case metadata, full narrative
+    sections with per-section approval status, screening results, and
+    audit trail.  Suitable for SAR filing or supervisor review.
+    """
+    db = await get_service_db()
+
+    # ── Narrative ──────────────────────────────────────────────────────────
+    try:
+        nar_res = await (
+            db.table("narratives")
+            .select("*")
+            .eq("id", narrative_id)
+            .eq("organization_id", auth.organization_id)
+            .single()
+            .execute()
+        )
+    except Exception:
+        raise HTTPException(status_code=404, detail="Narrative not found")
+
+    nar: dict[str, Any] = nar_res.data  # type: ignore[assignment]
+    case_id: str = nar["case_id"]
+
+    # ── Sections ───────────────────────────────────────────────────────────
+    sec_res = await (
+        db.table("narrative_sections")
+        .select("*")
+        .eq("narrative_id", narrative_id)
+        .eq("organization_id", auth.organization_id)
+        .order("order_index")
+        .execute()
+    )
+    sections: list[dict[str, Any]] = sec_res.data or []  # type: ignore[assignment]
+
+    # ── Case ───────────────────────────────────────────────────────────────
+    try:
+        case_res = await (
+            db.table("cases")
+            .select("*")
+            .eq("id", case_id)
+            .eq("organization_id", auth.organization_id)
+            .single()
+            .execute()
+        )
+    except Exception:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    case: dict[str, Any] = case_res.data  # type: ignore[assignment]
+
+    # ── Screening results ──────────────────────────────────────────────────
+    scr_res = await (
+        db.table("screening_results")
+        .select("*")
+        .eq("case_id", case_id)
+        .eq("organization_id", auth.organization_id)
+        .order("match_confidence", desc=True)
+        .execute()
+    )
+    screening: list[dict[str, Any]] = scr_res.data or []  # type: ignore[assignment]
+
+    # ── Audit trail (last 20 entries on the case) ──────────────────────────
+    try:
+        audit_res = await (
+            db.table("audit_log")
+            .select("action, table_name, created_at")
+            .eq("organization_id", auth.organization_id)
+            .eq("record_id", case_id)
+            .order("created_at", desc=True)
+            .limit(20)
+            .execute()
+        )
+        audit_entries: list[dict[str, Any]] = audit_res.data or []  # type: ignore[assignment]
+    except Exception:
+        audit_entries = []
+
+    # ── Build PDF ──────────────────────────────────────────────────────────
+    pdf_bytes = build_narrative_pdf(nar, sections, case, screening, audit_entries)
+
+    filename = f"narrative-{narrative_id[-8:]}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

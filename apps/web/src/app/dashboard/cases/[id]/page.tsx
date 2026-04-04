@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
-import { getCase, runInvestigation, ApiError } from "@/lib/api";
+import { getCase, runInvestigation, exportNarrativePdf, ApiError } from "@/lib/api";
 import type { CaseDetail, InvestigationStep, ScreeningResult } from "@/lib/types";
 import {
   SAMPLE_CASE_DETAIL,
@@ -45,6 +45,8 @@ export default function CaseDetailPage({
   // Investigation state
   const [investigating, setInvestigating] = useState(false);
   const [pollError, setPollError] = useState<string | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollStartRef = useRef<number>(0);
 
@@ -125,6 +127,32 @@ export default function CaseDetailPage({
 
     pollRef.current = setTimeout(tick, POLL_INTERVAL_MS);
   }, [id]);
+
+  // ---------------------------------------------------------------------------
+  // Export PDF
+  // ---------------------------------------------------------------------------
+  async function handleExportPdf() {
+    if (!narrative) return;
+    setExportingPdf(true);
+    setExportError(null);
+    try {
+      const blob = await exportNarrativePdf(narrative.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `narrative-${narrative.id.slice(-8).toUpperCase()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(
+        err instanceof ApiError ? err.message : "PDF export failed"
+      );
+    } finally {
+      setExportingPdf(false);
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Run investigation
@@ -287,6 +315,27 @@ export default function CaseDetailPage({
         {/* Screening results */}
         {(detail?.screening_results.length ?? 0) > 0 && (
           <ScreeningPanel results={detail!.screening_results} />
+        )}
+
+        {/* Narrative actions */}
+        {narrative && (
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+              Narrative · v{narrative.version}
+            </p>
+            <div className="flex items-center gap-2">
+              {exportError && (
+                <span className="text-xs text-red-500">{exportError}</span>
+              )}
+              <button
+                onClick={handleExportPdf}
+                disabled={exportingPdf}
+                className="rounded border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {exportingPdf ? "Generating…" : "Export PDF"}
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Narrative viewer */}

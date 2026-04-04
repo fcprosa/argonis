@@ -123,6 +123,22 @@ export function getNarrative(id: string): Promise<NarrativeDetail> {
   return req<NarrativeDetail>(`/narratives/${id}`);
 }
 
+export async function exportNarrativePdf(narrativeId: string): Promise<Blob> {
+  const token = getToken();
+  const res = await fetch(`${API_URL}/narratives/${narrativeId}/export/pdf`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      detail = body?.detail ?? detail;
+    } catch { /* ignore */ }
+    throw new ApiError(res.status, detail);
+  }
+  return res.blob();
+}
+
 export function approveNarrativeSections(
   narrativeId: string,
   body: {
