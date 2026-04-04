@@ -6,6 +6,8 @@ import type {
   InvestigateResponse,
   NarrativeDetail,
   NarrativeSection,
+  AlertImport,
+  BatchAlertsResponse,
 } from "./types";
 
 const API_URL =
@@ -63,6 +65,19 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return res.json() as Promise<T>;
+}
+
+// ---------------------------------------------------------------------------
+// Alerts
+// ---------------------------------------------------------------------------
+
+export function batchImportAlerts(
+  alerts: AlertImport[],
+): Promise<BatchAlertsResponse> {
+  return req<BatchAlertsResponse>("/alerts/batch", {
+    method: "POST",
+    body: JSON.stringify({ alerts }),
+  });
 }
 
 // ---------------------------------------------------------------------------

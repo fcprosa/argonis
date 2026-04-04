@@ -119,3 +119,17 @@ export interface InvestigateResponse {
   status: string;
   message: string;
 }
+
+export interface AlertImport {
+  case_id?: string;
+  customer_name: string;
+  alert_type: string;
+  risk_score?: number;
+  status?: string;
+  created_at?: string;
+}
+
+export interface BatchAlertsResponse {
+  imported: number;
+  case_ids: string[];
+}

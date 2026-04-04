@@ -100,9 +100,8 @@ export default function AlertQueuePage() {
             Try Sample Data
           </button>
           <button
-            disabled
-            title="CSV upload — coming soon"
-            className="rounded bg-[#111] px-3 py-1.5 text-xs font-medium text-white opacity-40 cursor-not-allowed"
+            onClick={() => router.push("/dashboard/upload")}
+            className="rounded bg-[#111] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#333] transition-colors"
           >
             Upload Alerts
           </button>

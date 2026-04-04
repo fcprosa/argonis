@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Alert Queue", icon: "▤" },
+  { href: "/dashboard/upload", label: "Upload Alerts", icon: "↑" },
 ];
 
 export default function DashboardLayout({
