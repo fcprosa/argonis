@@ -720,6 +720,123 @@ export const SAMPLE_CASE_DETAIL: Record<string, CaseDetail> = {
 };
 
 // ---------------------------------------------------------------------------
+// Demo pipeline step definitions (for animated investigation in demo mode)
+// ---------------------------------------------------------------------------
+
+export interface DemoPipelineStep {
+  key: string;
+  label: string;
+  detail: string;
+  durationMs: number;
+}
+
+export const DEMO_PIPELINES: Record<string, DemoPipelineStep[]> = {
+  "demo-case-001": [
+    { key: "parse",   label: "PARSE",   detail: "Alert parsed — AML-2026-00147 · Cash Structuring · 47 transactions extracted", durationMs: 800 },
+    { key: "gather",  label: "GATHER",  detail: "KYC retrieved · 47 transactions loaded · 6 branch locations identified · 90-day history", durationMs: 1700 },
+    { key: "screen",  label: "SCREEN",  detail: "OFAC SDN: Clear · OpenSanctions: Clear · PEP: Clear · Adverse Media: 0 hits", durationMs: 2000 },
+    { key: "analyze", label: "ANALYZE", detail: "Structuring detected (87% confidence) · Velocity anomaly +615% vs baseline · Branch dispersion flagged", durationMs: 1800 },
+    { key: "narrate", label: "NARRATE", detail: "Narrative generated — 4 sections · 892 words · all claims anchored to evidence", durationMs: 3200 },
+  ],
+  "demo-case-002": [
+    { key: "parse",   label: "PARSE",   detail: "Alert parsed — AML-2026-00312 · Wire Transfer Layering · 23 inbound + 19 outbound wires", durationMs: 800 },
+    { key: "gather",  label: "GATHER",  detail: "3 entities profiled · 180-day history · UBO unconfirmed (Cayman vehicle) · 4 correspondent banks", durationMs: 1700 },
+    { key: "screen",  label: "SCREEN",  detail: "OFAC SDN: Clear · OpenSanctions: Clear · Adverse Media: 1 hit (MAS enforcement action 2024)", durationMs: 2100 },
+    { key: "analyze", label: "ANALYZE", detail: "Layering detected (61% confidence) · Round-trip pattern confirmed · Invoice discrepancy 340%", durationMs: 1800 },
+    { key: "narrate", label: "NARRATE", detail: "EDD narrative generated — 4 sections · 1,024 words · DAML consent request recommended", durationMs: 3400 },
+  ],
+  "demo-case-003": [
+    { key: "parse",   label: "PARSE",   detail: "Alert parsed — AML-2026-00394 · Sanctions Name Match · Russian national · 8 transactions · USD 890,000", durationMs: 600 },
+    { key: "gather",  label: "GATHER",  detail: "KYC loaded · 142-day dormancy confirmed · USD 890,000 sudden inflow from Rosbank Moscow", durationMs: 1400 },
+    { key: "screen",  label: "SCREEN",  detail: "OFAC SDN: HIT 96% — PETROV, Viktor Alekseyevich — EO14024 · Rosbank counterparty sanctioned", durationMs: 1800 },
+    { key: "analyze", label: "ANALYZE", detail: "Sanctions match confirmed (94% confidence) · Dormant account reactivation · IMMEDIATE SAR FILING", durationMs: 1600 },
+    { key: "narrate", label: "NARRATE", detail: "SAR narrative generated — 4 sections · 978 words · Account freeze + OFAC blocking report required", durationMs: 2800 },
+  ],
+};
+
+// ---------------------------------------------------------------------------
+// Full screening panel data (includes Clear results, not just hits)
+// ---------------------------------------------------------------------------
+
+export interface FullScreeningResult {
+  id: string;
+  list_name: string;
+  status: "clear" | "potential_match" | "hit";
+  match_confidence: number;
+  entity_name: string;
+  snippet: string;
+  source_url: string | null;
+}
+
+export const DEMO_FULL_SCREENING: Record<string, FullScreeningResult[]> = {
+  "demo-case-001": [
+    { id: "fsr-001-01", list_name: "OFAC SDN List",           status: "clear", match_confidence: 0,    entity_name: "Ahmad Al-Rashid",       snippet: "No match found in OFAC Specially Designated Nationals and Blocked Persons list.",     source_url: "https://sanctionssearch.ofac.treas.gov/" },
+    { id: "fsr-001-02", list_name: "OpenSanctions",           status: "clear", match_confidence: 0,    entity_name: "Ahmad Al-Rashid",       snippet: "No match found across UN, EU, UK, and 40+ national sanctions lists.",               source_url: null },
+    { id: "fsr-001-03", list_name: "PEP Database",            status: "clear", match_confidence: 0,    entity_name: "Ahmad Al-Rashid",       snippet: "Subject is not a Politically Exposed Person (PEP). No government or senior official role identified.", source_url: null },
+    { id: "fsr-001-04", list_name: "Adverse Media",           status: "clear", match_confidence: 0,    entity_name: "Ahmad Al-Rashid",       snippet: "0 relevant adverse media results. Queries: financial crime, sanctions, regulatory action.",           source_url: null },
+  ],
+  "demo-case-002": [
+    { id: "fsr-002-01", list_name: "OFAC SDN List",           status: "clear",          match_confidence: 0,    entity_name: "Global Trade Corp Ltd",    snippet: "No match found for entity name against OFAC SDN list.",                        source_url: "https://sanctionssearch.ofac.treas.gov/" },
+    { id: "fsr-002-02", list_name: "OpenSanctions",           status: "clear",          match_confidence: 0,    entity_name: "Global Trade Corp Ltd",    snippet: "No match found across UN, EU, UK, and 40+ national sanctions lists.",         source_url: null },
+    { id: "fsr-002-03", list_name: "OFAC SDN List — Director", status: "potential_match", match_confidence: 0.72, entity_name: "Chen Wei-Lin (Director)", snippet: "CHEN, Wei-Lin — DOB circa 1968 — Singapore national. 72% fuzzy name match. Below 85% confirmation threshold. Flagged for analyst review.", source_url: "https://sanctionssearch.ofac.treas.gov/" },
+    { id: "fsr-002-04", list_name: "Adverse Media",           status: "hit",            match_confidence: 0.74, entity_name: "Global Trade Corp Ltd",    snippet: "Singapore MAS enforcement action (2024) — undisclosed beneficial ownership, suspected trade misinvoicing across UAE free-zone entities.", source_url: null },
+  ],
+  "demo-case-003": [
+    { id: "fsr-003-01", list_name: "OFAC SDN List",    status: "hit",            match_confidence: 0.96, entity_name: "Viktor Petrov", snippet: "PETROV, Viktor Alekseyevich — DOB 03 Sep 1971, Yekaterinburg, Russia — Program: RUSSIA-EO14024 — designated 22 Feb 2022.",              source_url: "https://sanctionssearch.ofac.treas.gov/" },
+    { id: "fsr-003-02", list_name: "OpenSanctions",    status: "hit",            match_confidence: 0.94, entity_name: "Viktor Petrov", snippet: "Viktor A. Petrov — Russian Federation — OFAC, EU Council, UKFCO concurrent designation. Energy sector sanctions.",                      source_url: null },
+    { id: "fsr-003-03", list_name: "Adverse Media",    status: "hit",            match_confidence: 0.88, entity_name: "Viktor Petrov", snippet: "Multiple media reports (Reuters, FT, Bloomberg): sanctioned Russian national, asset freeze across EU and US jurisdictions, 2022 designation.", source_url: null },
+    { id: "fsr-003-04", list_name: "PEP Database",     status: "potential_match", match_confidence: 0.65, entity_name: "Viktor Petrov", snippet: "Former board member of state energy company — elevated PEP classification. Secondary screening recommended.",                           source_url: null },
+  ],
+};
+
+// ---------------------------------------------------------------------------
+// Audit trail entries per case
+// ---------------------------------------------------------------------------
+
+export interface AuditEntry {
+  id: string;
+  timestamp: string;
+  actor: string;
+  action: string;
+  detail: string;
+  evidence_id?: string;
+}
+
+export const DEMO_AUDIT_TRAILS: Record<string, AuditEntry[]> = {
+  "demo-case-001": [
+    { id: "aud-001-01", timestamp: "2026-04-02T09:15:00Z", actor: "System",              action: "Case created",                       detail: "Alert AML-2026-00147 ingested via real-time transaction monitoring. Cash structuring trigger threshold breached." },
+    { id: "aud-001-02", timestamp: "2026-04-02T09:16:45Z", actor: "AI Agent",            action: "Step 1 PARSE — complete (0.8s)",      detail: "Alert parsed into structured schema. 47 transactions extracted. Currency: GBP. Reporting threshold: £10,000." },
+    { id: "aud-001-03", timestamp: "2026-04-02T09:18:12Z", actor: "AI Agent",            action: "Step 2 GATHER — complete (1.7s)",     detail: "KYC data retrieved. 47 cash deposits loaded. 6 branch locations identified. 90-day transaction history compiled." },
+    { id: "aud-001-04", timestamp: "2026-04-02T09:22:05Z", actor: "AI Agent",            action: "Step 3 SCREEN — complete (2.0s)",     detail: "OFAC SDN: Clear · OpenSanctions: Clear · PEP: Clear · Adverse Media: 0 hits. 2 entities screened." },
+    { id: "aud-001-05", timestamp: "2026-04-02T09:25:33Z", actor: "AI Agent",            action: "Step 4 ANALYZE — complete (1.8s)",   detail: "Structuring pattern detected (0.87 confidence). Velocity anomaly: +615% vs 90-day baseline. Branch dispersion across 6 locations.", evidence_id: "EVID-003" },
+    { id: "aud-001-06", timestamp: "2026-04-02T09:30:18Z", actor: "AI Agent",            action: "Step 5 NARRATE — complete (3.2s)",   detail: "SAR narrative generated — 4 sections, 892 words. All factual claims anchored to verified evidence sources." },
+    { id: "aud-001-07", timestamp: "2026-04-02T14:10:44Z", actor: "analyst@argonis.ai",  action: "Section approved — Executive Summary", detail: "Approved without changes.", evidence_id: "EVID-001" },
+    { id: "aud-001-08", timestamp: "2026-04-02T14:12:07Z", actor: "analyst@argonis.ai",  action: "Section flagged — Transaction Analysis", detail: "Flagged: UBO of Al-Rashid Trading LLC unconfirmed. KYC refresh required before entity can be named in SAR." },
+  ],
+  "demo-case-002": [
+    { id: "aud-002-01", timestamp: "2026-04-02T11:30:00Z", actor: "System",              action: "Case created",                       detail: "Alert AML-2026-00312 ingested. Wire transfer layering trigger — 23 inbound, 19 outbound within 48 hours." },
+    { id: "aud-002-02", timestamp: "2026-04-02T11:32:14Z", actor: "AI Agent",            action: "Step 1 PARSE — complete (0.8s)",      detail: "Alert parsed. 23 inbound wires, 19 outbound wires, 8 jurisdictions, €2.1M total volume." },
+    { id: "aud-002-03", timestamp: "2026-04-02T11:34:45Z", actor: "AI Agent",            action: "Step 2 GATHER — complete (1.7s)",     detail: "3 entities profiled (GTC Ltd, GTC Holdings FZE, Chen Wei-Lin). UBO unconfirmed — Cayman Islands holding vehicle, no public registry." },
+    { id: "aud-002-04", timestamp: "2026-04-02T11:38:22Z", actor: "AI Agent",            action: "Step 3 SCREEN — complete (2.1s)",     detail: "OFAC SDN: Clear · OpenSanctions: Clear · Director partial match: 72% (below threshold) · Adverse Media: 1 hit (MAS 2024)." },
+    { id: "aud-002-05", timestamp: "2026-04-02T11:44:08Z", actor: "AI Agent",            action: "Step 4 ANALYZE — complete (1.8s)",   detail: "Layering confirmed (0.61 confidence). Round-trip funds: UAE → Singapore → Hong Kong → UK under 'commodity settlement'. Invoice discrepancy: 340%.", evidence_id: "EVID-003" },
+    { id: "aud-002-06", timestamp: "2026-04-02T11:50:33Z", actor: "AI Agent",            action: "Step 5 NARRATE — complete (3.4s)",   detail: "EDD narrative generated — 4 sections, 1,024 words. DAML consent request recommended. SAR deferred pending EDD outcome." },
+    { id: "aud-002-07", timestamp: "2026-04-02T16:10:19Z", actor: "analyst@argonis.ai",  action: "Section approved — Executive Summary",    detail: "Approved — overall risk characterisation and MAS reference verified." },
+    { id: "aud-002-08", timestamp: "2026-04-02T16:12:41Z", actor: "analyst@argonis.ai",  action: "Section approved — Transaction Analysis", detail: "Approved — DAML referral language and NCA process steps verified against current guidance." },
+  ],
+  "demo-case-003": [
+    { id: "aud-003-01", timestamp: "2026-04-03T08:05:00Z", actor: "System",              action: "Case created",                         detail: "Alert AML-2026-00394 ingested. OFAC name-screening alert — automatic case creation triggered." },
+    { id: "aud-003-02", timestamp: "2026-04-03T08:07:09Z", actor: "AI Agent",            action: "Step 1 PARSE — complete (0.6s)",        detail: "Alert parsed. Viktor Petrov, Russian national, passport ****4417. 8 transactions, USD 890,000, account ****2291." },
+    { id: "aud-003-03", timestamp: "2026-04-03T08:09:22Z", actor: "AI Agent",            action: "Step 2 GATHER — complete (1.4s)",       detail: "KYC loaded. 142-day account dormancy confirmed (14 Sep 2025 – 4 Mar 2026). USD 890,000 sudden inflow from Rosbank Moscow." },
+    { id: "aud-003-04", timestamp: "2026-04-03T08:13:47Z", actor: "AI Agent",            action: "Step 3 SCREEN — CRITICAL HIT (1.8s)",   detail: "OFAC SDN HIT: PETROV, Viktor Alekseyevich — confidence 96% — Program: RUSSIA-EO14024 — designated 22 Feb 2022. Counterparty ROSB RU MM (Rosbank) also sanctioned.", evidence_id: "EVID-002" },
+    { id: "aud-003-05", timestamp: "2026-04-03T08:18:33Z", actor: "AI Agent",            action: "Step 4 ANALYZE — complete (1.6s)",     detail: "Sanctions match confirmed (0.94 confidence). Dormant account reactivation pattern. 8 inbound transfers from sanctioned correspondent. IMMEDIATE SAR FILING required.", evidence_id: "EVID-002" },
+    { id: "aud-003-06", timestamp: "2026-04-03T08:25:11Z", actor: "AI Agent",            action: "Step 5 NARRATE — complete (2.8s)",     detail: "SAR narrative generated — 4 sections, 978 words. Account freeze instructions + OFAC blocking report procedures documented." },
+    { id: "aud-003-07", timestamp: "2026-04-03T09:45:30Z", actor: "analyst@argonis.ai",  action: "Section approved — Executive Summary",  detail: "Approved. OFAC match verified against live SDN database. Match parameters cross-checked: name, DOB, nationality.", evidence_id: "EVID-002" },
+    { id: "aud-003-08", timestamp: "2026-04-03T09:47:15Z", actor: "analyst@argonis.ai",  action: "Section approved — Subject Profile",    detail: "Approved. Passport details, dormancy timeline, and KYC data cross-checked against source records.", evidence_id: "EVID-001" },
+    { id: "aud-003-09", timestamp: "2026-04-03T09:55:44Z", actor: "bso@argonis.ai",      action: "Case escalated to BSA/OFAC Officer",    detail: "Account ****2291 freeze initiated pending OFAC blocking report. Board notification triggered. Tipping-off prohibition in effect." },
+  ],
+};
+
+// ---------------------------------------------------------------------------
 // Helpers to parse titles
 // ---------------------------------------------------------------------------
 

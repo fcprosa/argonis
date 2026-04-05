@@ -262,28 +262,130 @@ export default function HomePage() {
 
       <div style={{ borderTop: "1px solid #1A1A1A" }} />
 
-      {/* ── Competitor callout ───────────────────────────────────────────── */}
+      {/* ── Founder credibility ─────────────────────────────────────────── */}
       <section className="mx-auto max-w-5xl px-8 py-20">
-        <div
-          className="rounded-lg p-8"
-          style={{ backgroundColor: "#111111", border: "1px solid #1F1F1F" }}
+        <p
+          className="text-xs font-semibold tracking-widest uppercase mb-12"
+          style={{ color: "#555555" }}
         >
+          Built by someone who&apos;s done the work
+        </p>
+        <div className="flex items-start gap-10">
+          <div className="shrink-0 pt-1">
+            <div className="w-8 h-px" style={{ backgroundColor: Y }} />
+          </div>
           <p
-            className="text-xs font-semibold tracking-widest uppercase mb-4"
-            style={{ color: "#555555" }}
+            className="text-lg leading-relaxed"
+            style={{ color: "#9CA3AF", maxWidth: "640px" }}
           >
-            Why not Greenlite, Lucinity, or Nasdaq Verafin?
+            Argonis was built by a former JPMorgan GFCC investigator who spent
+            two years writing AML investigation narratives and filing SARs across
+            Investigations and Sanctions/Blocked Assets. EU citizen. Trilingual
+            (English, Portuguese, Spanish). Relocating to Europe to serve the
+            market firsthand.
           </p>
-          <p
-            className="text-xl font-semibold leading-snug"
-            style={{ color: "#FFFFFF", maxWidth: "640px" }}
-          >
-            They generate narratives from{" "}
-            <span style={{ color: "#EF4444" }}>LLM imagination</span>.
-            {" "}We build them from{" "}
-            <span style={{ color: Y }}>verified evidence</span>.
-            {" "}The difference is auditability.
-          </p>
+        </div>
+      </section>
+
+      <div style={{ borderTop: "1px solid #1A1A1A" }} />
+
+      {/* ── Comparison table ────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-5xl px-8 py-20">
+        <p
+          className="text-xs font-semibold tracking-widest uppercase mb-10"
+          style={{ color: "#555555" }}
+        >
+          How it&apos;s different
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr style={{ borderBottom: "1px solid #1F1F1F" }}>
+                {["", "Bretton AI", "Lucinity", "Nasdaq Verafin", "Argonis"].map(
+                  (h, i) => (
+                    <th
+                      key={i}
+                      className={[
+                        "pb-4 text-left text-xs font-semibold tracking-wider",
+                        i === 0
+                          ? "pr-6 w-40"
+                          : i === 4
+                            ? "pl-6 uppercase"
+                            : "px-6",
+                      ].join(" ")}
+                      style={{
+                        color: i === 4 ? Y : i === 0 ? "#333333" : "#555555",
+                      }}
+                    >
+                      {h}
+                    </th>
+                  ),
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                [
+                  "Architecture",
+                  "LLM-driven",
+                  "AI copilot",
+                  "Enterprise platform",
+                  "Evidence-first",
+                ],
+                [
+                  "Narrative source",
+                  "LLM generates",
+                  "LLM assists",
+                  "Template-based",
+                  "LLM assembles from verified data",
+                ],
+                [
+                  "Fact verification",
+                  "Post-hoc review",
+                  "Manual",
+                  "Manual",
+                  "Inline — every claim linked to source",
+                ],
+                [
+                  "European focus",
+                  "US-first",
+                  "Nordic-first",
+                  "US enterprise",
+                  "AMLD6-native, built for EU EMIs",
+                ],
+                ["Deployment", "Months", "Weeks", "Months", "Days"],
+                [
+                  "Hallucination risk",
+                  "Medium",
+                  "Medium",
+                  "Low",
+                  "Near-zero by design",
+                ],
+              ].map((row, ri) => (
+                <tr key={ri} style={{ borderBottom: "1px solid #151515" }}>
+                  {row.map((cell, ci) => (
+                    <td
+                      key={ci}
+                      className={[
+                        "py-3.5 text-sm",
+                        ci === 0 ? "pr-6 text-xs font-semibold uppercase tracking-wider" : ci === 4 ? "pl-6 font-semibold" : "px-6",
+                      ].join(" ")}
+                      style={{
+                        color:
+                          ci === 4
+                            ? Y
+                            : ci === 0
+                              ? "#444444"
+                              : "#6B7280",
+                      }}
+                    >
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -316,13 +418,38 @@ export default function HomePage() {
         style={{ borderTop: "1px solid #1A1A1A" }}
         className="px-8 py-8"
       >
-        <div className="mx-auto max-w-5xl flex items-center justify-between">
+        <div className="mx-auto max-w-5xl flex items-center justify-between gap-6 flex-wrap">
           <p className="text-xs" style={{ color: "#333333" }}>
             Argonis — AML Investigation Platform · Built for European compliance
           </p>
-          <p className="text-xs" style={{ color: "#333333" }}>
-            © 2026
-          </p>
+          <div className="flex items-center gap-6">
+            <a
+              href="/privacy"
+              className="text-xs transition-colors hover:text-white"
+              style={{ color: "#333333" }}
+            >
+              Privacy Policy
+            </a>
+            <a
+              href="mailto:daniel@argonis.ai"
+              className="text-xs transition-colors hover:text-white"
+              style={{ color: "#333333" }}
+            >
+              Contact
+            </a>
+            <a
+              href="https://www.linkedin.com/company/argonis"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs transition-colors hover:text-white"
+              style={{ color: "#333333" }}
+            >
+              LinkedIn
+            </a>
+            <p className="text-xs" style={{ color: "#222222" }}>
+              © 2026
+            </p>
+          </div>
         </div>
       </footer>
     </div>

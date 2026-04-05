@@ -115,6 +115,42 @@ export default function AlertQueuePage() {
         </div>
       )}
 
+      {/* Stats bar */}
+      {cases.length > 0 && (
+        <div className="shrink-0 flex items-center gap-0 border-b border-gray-100 bg-white">
+          {[
+            { label: "Total Alerts", value: cases.length },
+            {
+              label: "Critical",
+              value: cases.filter((c) => (riskScores[c.id] ?? 0) >= 0.85).length,
+              accent: "text-red-600",
+            },
+            {
+              label: "In Review",
+              value: cases.filter((c) => c.status === "in_review").length,
+              accent: "text-blue-600",
+            },
+            {
+              label: "Resolved",
+              value: cases.filter((c) => c.status === "closed").length,
+              accent: "text-green-600",
+            },
+          ].map((s, i) => (
+            <div
+              key={i}
+              className="flex flex-col gap-0.5 px-6 py-3 border-r border-gray-100 last:border-r-0"
+            >
+              <span className={["text-lg font-bold tabular-nums", s.accent ?? "text-gray-900"].join(" ")}>
+                {s.value}
+              </span>
+              <span className="text-[10px] font-medium uppercase tracking-wider text-gray-400">
+                {s.label}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Table area */}
       <div className="flex-1 overflow-auto px-6 py-4">
         {loading ? (
@@ -156,7 +192,7 @@ export default function AlertQueuePage() {
                 return (
                   <tr
                     key={c.id}
-                    onClick={() => { window.location.href = `/dashboard/cases/${c.id}`; }}
+                    onClick={() => { window.location.href = `/dashboard/case/${c.id}`; }}
                     className={[
                       "cursor-pointer border-b border-gray-100 transition-colors",
                       i % 2 === 0 ? "bg-white" : "bg-gray-50/50",
