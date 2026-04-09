@@ -31,8 +31,6 @@ export default function AlertQueuePage() {
     setError(null);
     try {
       const data = await listCases({ limit: 100 });
-      // Extract risk scores from investigation_steps where available
-      // (list endpoint doesn't include steps; we use description hints)
       const scores: Record<string, number> = {};
       data.forEach((c) => {
         const m = c.description?.match(/score (0\.\d+)/);
@@ -64,30 +62,26 @@ export default function AlertQueuePage() {
   }
 
   const sorted = [...cases].sort((a, b) => {
-    if (sort === "risk") {
-      return (riskScores[b.id] ?? 0) - (riskScores[a.id] ?? 0);
-    }
-    if (sort === "status") {
-      return a.status.localeCompare(b.status);
-    }
+    if (sort === "risk") return (riskScores[b.id] ?? 0) - (riskScores[a.id] ?? 0);
+    if (sort === "status") return a.status.localeCompare(b.status);
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Page header */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6">
-        <div className="flex items-center gap-4">
-          <h1 className="text-sm font-semibold text-gray-900 tracking-tight">
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-surface-1 px-5">
+        <div className="flex items-center gap-3">
+          <h1 className="text-xs font-semibold uppercase tracking-wider text-white">
             Alert Queue
           </h1>
           {cases.length > 0 && (
-            <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+            <span className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
               {cases.length}
             </span>
           )}
           {demoMode && (
-            <span className="rounded bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 ring-1 ring-yellow-300">
+            <span className="rounded bg-accent-subtle px-1.5 py-0.5 font-mono text-[10px] font-medium text-accent-DEFAULT ring-1 ring-accent-DEFAULT/30">
               DEMO
             </span>
           )}
@@ -95,55 +89,55 @@ export default function AlertQueuePage() {
         <div className="flex items-center gap-2">
           <button
             onClick={loadSampleData}
-            className="rounded border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+            className="rounded border border-border px-2.5 py-1 text-[11px] font-medium text-text-muted transition-colors hover:border-border-strong hover:text-white"
           >
-            Try Sample Data
+            Sample Data
           </button>
           <button
             onClick={() => router.push("/dashboard/upload")}
-            className="rounded bg-[#111] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#333] transition-colors"
+            className="rounded bg-accent-DEFAULT px-2.5 py-1 text-[11px] font-semibold text-surface-base transition-colors hover:bg-accent-hover"
           >
             Upload Alerts
           </button>
         </div>
       </header>
 
-      {/* Error banner */}
+      {/* Error / info banner */}
       {error && (
-        <div className="shrink-0 border-b border-yellow-200 bg-yellow-50 px-6 py-2">
-          <p className="text-xs text-yellow-700">{error}</p>
+        <div className="shrink-0 border-b border-warn-subtle bg-warn-subtle px-5 py-1.5">
+          <p className="text-[11px] text-warn-DEFAULT">{error}</p>
         </div>
       )}
 
       {/* Stats bar */}
       {cases.length > 0 && (
-        <div className="shrink-0 flex items-center gap-0 border-b border-gray-100 bg-white">
+        <div className="shrink-0 flex items-center border-b border-border bg-surface-1">
           {[
-            { label: "Total Alerts", value: cases.length },
+            { label: "Total", value: cases.length, color: "text-white" },
             {
               label: "Critical",
               value: cases.filter((c) => (riskScores[c.id] ?? 0) >= 0.85).length,
-              accent: "text-red-600",
+              color: "text-danger-DEFAULT",
             },
             {
               label: "In Review",
               value: cases.filter((c) => c.status === "in_review").length,
-              accent: "text-blue-600",
+              color: "text-accent-DEFAULT",
             },
             {
-              label: "Resolved",
+              label: "Closed",
               value: cases.filter((c) => c.status === "closed").length,
-              accent: "text-green-600",
+              color: "text-success-DEFAULT",
             },
           ].map((s, i) => (
             <div
               key={i}
-              className="flex flex-col gap-0.5 px-6 py-3 border-r border-gray-100 last:border-r-0"
+              className="flex flex-col gap-0.5 border-r border-border px-5 py-2.5 last:border-r-0"
             >
-              <span className={["text-lg font-bold tabular-nums", s.accent ?? "text-gray-900"].join(" ")}>
+              <span className={`font-mono text-base font-bold tabular-nums ${s.color}`}>
                 {s.value}
               </span>
-              <span className="text-[10px] font-medium uppercase tracking-wider text-gray-400">
+              <span className="text-[10px] uppercase tracking-wider text-text-muted">
                 {s.label}
               </span>
             </div>
@@ -151,91 +145,66 @@ export default function AlertQueuePage() {
         </div>
       )}
 
-      {/* Table area */}
-      <div className="flex-1 overflow-auto px-6 py-4">
+      {/* Table */}
+      <div className="flex-1 overflow-auto">
         {loading ? (
           <LoadingSkeleton />
         ) : cases.length === 0 ? (
           <EmptyState onSample={loadSampleData} />
         ) : (
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-gray-200">
+          <table className="w-full border-collapse text-xs">
+            <thead className="sticky top-0 z-10 bg-surface-1">
+              <tr className="border-b border-border">
                 <Th>Case ID</Th>
                 <Th>Customer</Th>
                 <Th>Alert Type</Th>
-                <SortableTh
-                  label="Risk Score"
-                  field="risk"
-                  current={sort}
-                  onSort={setSort}
-                />
-                <SortableTh
-                  label="Status"
-                  field="status"
-                  current={sort}
-                  onSort={setSort}
-                />
-                <SortableTh
-                  label="Created"
-                  field="created_at"
-                  current={sort}
-                  onSort={setSort}
-                />
+                <SortableTh label="Risk" field="risk" current={sort} onSort={setSort} />
+                <SortableTh label="Status" field="status" current={sort} onSort={setSort} />
+                <SortableTh label="Created" field="created_at" current={sort} onSort={setSort} />
               </tr>
             </thead>
             <tbody>
-              {sorted.map((c, i) => {
+              {sorted.map((c) => {
                 const score = riskScores[c.id];
-                const { label: statusLabel, classes: statusClasses } =
-                  statusMeta(c.status);
+                const { label: statusLabel, classes: statusClasses } = statusMeta(c.status);
                 return (
                   <tr
                     key={c.id}
                     onClick={() => { window.location.href = `/dashboard/case/${c.id}`; }}
-                    className={[
-                      "cursor-pointer border-b border-gray-100 transition-colors",
-                      i % 2 === 0 ? "bg-white" : "bg-gray-50/50",
-                      "hover:bg-blue-50/50",
-                    ].join(" ")}
+                    className="cursor-pointer border-b border-border transition-colors hover:bg-surface-2"
                   >
-                    <td className="py-3 pl-0 pr-4 font-mono text-xs text-gray-400 whitespace-nowrap">
+                    <td className="py-2.5 pl-5 pr-4 font-mono text-[11px] text-text-muted whitespace-nowrap">
                       {c.id.slice(-8).toUpperCase()}
                     </td>
-                    <td className="py-3 pr-4 font-medium text-gray-900 whitespace-nowrap">
+                    <td className="py-2.5 pr-4 font-medium text-white whitespace-nowrap">
                       {parseCustomerName(c.title)}
                     </td>
-                    <td className="py-3 pr-4 text-gray-600 whitespace-nowrap">
+                    <td className="py-2.5 pr-4 text-text-muted whitespace-nowrap">
                       {parseAlertType(c.title)}
                     </td>
-                    <td className="py-3 pr-4 whitespace-nowrap">
+                    <td className="py-2.5 pr-4 whitespace-nowrap">
                       {score != null ? (
                         <span
                           className={[
-                            "inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold",
+                            "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold font-mono",
                             riskColors(score),
                           ].join(" ")}
                         >
                           {riskLabel(score)}
-                          <span className="font-normal opacity-70">
+                          <span className="font-normal opacity-60">
                             {(score * 100).toFixed(0)}%
                           </span>
                         </span>
                       ) : (
-                        <span className="text-gray-300">—</span>
+                        <span className="text-text-faint">—</span>
                       )}
                     </td>
-                    <td className="py-3 pr-4 whitespace-nowrap">
-                      <span
-                        className={[
-                          "rounded px-2 py-0.5 text-xs font-medium",
-                          statusClasses,
-                        ].join(" ")}
-                      >
+                    <td className="py-2.5 pr-4 whitespace-nowrap">
+                      <span className={["rounded px-1.5 py-0.5 text-[11px] font-medium", statusClasses].join(" ")}>
                         {statusLabel}
                       </span>
                     </td>
-                    <td className="py-3 pr-0 text-xs text-gray-400 whitespace-nowrap">
+                    <td className="py-2.5 pr-5 font-mono text-[11px] text-text-muted whitespace-nowrap">
                       {fmtDate(c.created_at)}
                     </td>
                   </tr>
@@ -255,7 +224,7 @@ export default function AlertQueuePage() {
 
 function Th({ children }: { children: React.ReactNode }) {
   return (
-    <th className="pb-2 pr-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-400">
+    <th className="py-2 pl-5 pr-4 text-left text-[10px] font-semibold uppercase tracking-wider text-text-muted first:pl-5">
       {children}
     </th>
   );
@@ -274,16 +243,16 @@ function SortableTh({
 }) {
   const active = current === field;
   return (
-    <th className="pb-2 pr-4 text-left">
+    <th className="py-2 pr-4 text-left">
       <button
         onClick={() => onSort(field)}
         className={[
-          "flex items-center gap-1 text-xs font-semibold uppercase tracking-wider transition-colors",
-          active ? "text-gray-900" : "text-gray-400 hover:text-gray-600",
+          "flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider transition-colors",
+          active ? "text-white" : "text-text-muted hover:text-white",
         ].join(" ")}
       >
         {label}
-        <span className="text-[10px]">{active ? "▼" : "⇅"}</span>
+        <span className="text-[9px] opacity-60">{active ? "▼" : "⇅"}</span>
       </button>
     </th>
   );
@@ -291,9 +260,9 @@ function SortableTh({
 
 function LoadingSkeleton() {
   return (
-    <div className="space-y-2 animate-pulse">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="h-10 rounded bg-gray-100" />
+    <div className="space-y-px p-5">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div key={i} className="h-9 rounded bg-surface-2 animate-pulse" />
       ))}
     </div>
   );
@@ -302,13 +271,13 @@ function LoadingSkeleton() {
 function EmptyState({ onSample }: { onSample: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center">
-      <p className="text-sm text-gray-400">No cases found.</p>
-      <p className="mt-1 text-xs text-gray-300">
+      <p className="text-xs text-text-muted">No cases found.</p>
+      <p className="mt-1 text-[11px] text-text-faint">
         Connect the API or load sample data to get started.
       </p>
       <button
         onClick={onSample}
-        className="mt-4 rounded border border-gray-200 px-4 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50"
+        className="mt-5 rounded border border-border px-4 py-1.5 text-[11px] font-medium text-text-muted transition-colors hover:border-border-strong hover:text-white"
       >
         Try Sample Data
       </button>

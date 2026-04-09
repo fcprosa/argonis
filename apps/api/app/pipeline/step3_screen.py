@@ -55,6 +55,8 @@ _ADVERSE_KEYWORDS = frozenset(
 async def screen_entities(
     parsed: ParsedAlert,
     opensanctions_api_key: str = "",
+    serper_api_key: str = "",
+    anthropic_api_key: str | None = None,
     supabase_url: str = "",
     supabase_key: str = "",
     organization_id: str | None = None,
@@ -72,7 +74,11 @@ async def screen_entities(
     sources_queried: list[str] = []
     now = datetime.utcnow()
 
-    has_any_api = bool(opensanctions_api_key) or bool(supabase_url and supabase_key)
+    has_any_api = (
+        bool(opensanctions_api_key)
+        or bool(supabase_url and supabase_key)
+        or bool(serper_api_key)
+    )
 
     if has_any_api:
         # --- Use the unified screening module ---
@@ -84,6 +90,8 @@ async def screen_entities(
                 supabase_url=supabase_url,
                 supabase_key=supabase_key,
                 opensanctions_api_key=opensanctions_api_key,
+                serper_api_key=serper_api_key,
+                anthropic_api_key=anthropic_api_key,
                 organization_id=organization_id,
                 case_id=case_id,
             )

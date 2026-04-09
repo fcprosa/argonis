@@ -81,6 +81,7 @@ async def _run_pipeline_background(
             supabase_url=settings.supabase_url,
             supabase_key=settings.supabase_service_key,
             opensanctions_api_key=settings.opensanctions_api_key,
+            serper_api_key=settings.serper_api_key,
         )
         result = await pipeline.run(alert_data)
 
@@ -133,7 +134,18 @@ async def _run_pipeline_background(
                 "created_by": user_id,
             },
         ]
-        await db.table("investigation_steps").insert(steps_rows).execute()
+        steps_result = await db.table("investigation_steps").insert(steps_rows).execute()
+        # Build step-name → DB id map for evidence_links foreign keys
+        step_id_map: dict[str, Any] = {
+            row["name"]: row["id"] for row in (steps_result.data or [])  # type: ignore[index]
+        }
+        # Map pipeline source labels → step names
+        source_to_step = {
+            "step1_parse": "parse",
+            "step2_gather": "gather",
+            "step3_screen": "screen",
+            "step4_analyze": "analyze",
+        }
 
         # --- Store screening results ----------------------------------
         screening_rows = [
@@ -194,6 +206,55 @@ async def _run_pipeline_background(
         ]
         if section_rows:
             await db.table("narrative_sections").insert(section_rows).execute()
+
+        # --- Store evidence links (one per EvidenceItem) -------------
+        evidence_link_rows = []
+        for item in result.evidence_items:
+            step_name = source_to_step.get(item.source)
+            step_id = step_id_map.get(step_name) if step_name else None
+            if step_id is None:
+                # Fallback: link to the "analyze" step if source not mapped
+                step_id = step_id_map.get("analyze")
+            if step_id is None:
+                continue  # no step to link — skip rather than violate FK
+
+            evidence_link_rows.append(
+                {
+                    "organization_id": organization_id,
+                    "narrative_id": narrative_id,
+                    "sentence_text": f"[{item.category.upper()}] {item.description}: {item.value}"[:500],
+                    "source_type": "investigation_step",
+                    "investigation_step_id": step_id,
+                    "evidence_ref": item.id,
+                    "source_data": item.model_dump(mode="json"),
+                    "created_by": user_id,
+                }
+            )
+        if evidence_link_rows:
+            await db.table("evidence_links").insert(evidence_link_rows).execute()
+        logger.info("Stored %d evidence links for narrative=%s", len(evidence_link_rows), narrative_id)
+
+        # --- Log LLM usage -------------------------------------------
+        if result.llm_usage:
+            u = result.llm_usage
+            await db.table("llm_usage_log").insert(
+                {
+                    "organization_id": organization_id,
+                    "case_id": case_id,
+                    "model": u.model,
+                    "step": u.step,
+                    "input_tokens": u.input_tokens,
+                    "output_tokens": u.output_tokens,
+                    "cost_usd": str(u.cost_usd),
+                    "duration_ms": u.duration_ms,
+                }
+            ).execute()
+            logger.info(
+                "LLM usage logged: in=%d out=%d cost=$%.4f",
+                u.input_tokens,
+                u.output_tokens,
+                u.cost_usd,
+            )
 
         # --- Mark case as ready for review ----------------------------
         await (

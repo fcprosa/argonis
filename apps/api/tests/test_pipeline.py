@@ -1,5 +1,5 @@
 """
-End-to-end integration test: InvestigationPipeline against ONE hardcoded alert.
+End-to-end integration test: EvidencePipeline against ONE hardcoded alert.
 
 Alert typology: structuring / smurfing (UK jurisdiction)
   - Four cash deposits just below the £10,000 reporting threshold
@@ -22,8 +22,8 @@ import os
 
 import pytest
 
-from app.agent.core import InvestigationPipeline, PipelineResult
-from app.agent.models import InvestigationSummary
+from app.pipeline.core import EvidencePipeline
+from app.pipeline.models import EvidencePipelineResult
 
 # ---------------------------------------------------------------------------
 # Hardcoded test alert
@@ -98,17 +98,18 @@ HARDCODED_ALERT: dict[str, object] = {
     reason="ANTHROPIC_API_KEY not set",
 )
 async def test_pipeline_end_to_end() -> None:
-    """Run the full 4-step pipeline and assert on structured output quality."""
-    pipeline = InvestigationPipeline()
-    result: PipelineResult = await pipeline.run(HARDCODED_ALERT)
+    """Run the full 5-step evidence pipeline and assert on output quality."""
+    pipeline = EvidencePipeline(
+        api_key=os.environ["ANTHROPIC_API_KEY"],
+    )
+    result: EvidencePipelineResult = await pipeline.run(HARDCODED_ALERT)
 
-    _assert_triage(result)
-    _assert_entity_extraction(result)
-    _assert_risk_assessment(result)
-    _assert_investigation_summary(result)
-    _assert_token_usage(result)
+    _assert_parse(result)
+    _assert_analysis(result)
+    _assert_evidence_package(result)
+    _assert_narrative(result)
+    _assert_cost(result)
 
-    # Print full results for manual review when running with -s
     _print_results(result)
 
 
@@ -116,154 +117,100 @@ async def test_pipeline_end_to_end() -> None:
 # Per-step assertions
 # ---------------------------------------------------------------------------
 
-def _assert_triage(result: PipelineResult) -> None:
-    t = result.alert_triage
 
-    assert t.severity in ("high", "critical"), (
-        f"Structuring alert with adverse media should be high/critical, got: {t.severity}"
-    )
-    assert 0.0 <= t.confidence_score <= 1.0, (
-        f"confidence_score out of range: {t.confidence_score}"
-    )
-    assert t.risk_type, "risk_type must not be empty"
-    assert t.summary, "summary must not be empty"
-    # Structuring-specific: structured deposits just under threshold = immediate action
-    assert t.requires_immediate_action is True, (
-        "Four sub-threshold cash deposits + adverse media should require immediate action"
-    )
+def _assert_parse(result: EvidencePipelineResult) -> None:
+    p = result.parsed_alert
+    assert p.alert_id == "AML-2026-00147"
+    assert p.transaction_count == 4, f"Expected 4 transactions, got {p.transaction_count}"
+    assert p.total_amount == 39050, f"Expected total 39050 GBP, got {p.total_amount}"
+    assert p.nationality == "RU", f"Expected RU nationality, got {p.nationality}"
+    assert p.account_age_days == 47
+    assert p.reporting_threshold == 10000
+    print(f"\n[PARSE] alert_id={p.alert_id} txns={p.transaction_count} total={p.total_amount} {p.transactions[0].currency}")
 
+
+def _assert_analysis(result: EvidencePipelineResult) -> None:
+    a = result.analysis_result
+    assert a.structuring.detected, "Structuring must be detected for 4 sub-threshold deposits"
+    assert a.structuring.confidence >= 0.55, f"Structuring confidence too low: {a.structuring.confidence}"
+    assert a.geographic_risk.detected, "Geographic risk must flag RU nationality"
+    assert a.overall_risk_score >= 0.4, f"Risk score too low: {a.overall_risk_score}"
+    assert a.recommended_action in ("investigate", "escalate", "file_sar"), (
+        f"Expected escalation action, got: {a.recommended_action}"
+    )
     print(
-        f"\n[TRIAGE] severity={t.severity}  risk={t.risk_type}  "
-        f"confidence={t.confidence_score:.2f}  immediate={t.requires_immediate_action}"
-    )
-    print(f"         {t.summary}")
-
-
-def _assert_entity_extraction(result: PipelineResult) -> None:
-    e = result.entity_extraction
-
-    entity_names = [ent.name for ent in e.entities]
-    assert any("Voronov" in n or "Nexbridge" in n for n in entity_names), (
-        f"Must extract Voronov or Nexbridge as entities, got: {entity_names}"
+        f"\n[ANALYZE] risk={a.overall_risk_score:.3f} action={a.recommended_action} "
+        f"structuring={a.structuring.detected} geo_risk={a.geographic_risk.detected}"
     )
 
-    # All four transactions are GBP
-    gbp_amounts = [a for a in e.amounts if a.currency == "GBP"]
-    assert len(gbp_amounts) >= 4, (
-        f"Expected ≥4 GBP transaction amounts, got: {len(gbp_amounts)}"
-    )
 
-    # GB jurisdiction must be identified
-    assert "GB" in e.jurisdictions, (
-        f"GB must be in jurisdictions, got: {e.jurisdictions}"
-    )
+def _assert_evidence_package(result: EvidencePipelineResult) -> None:
+    items = result.evidence_items
+    assert len(items) >= 10, f"Expected ≥10 evidence items, got {len(items)}"
+    ids = {item.id for item in items}
+    assert all(i.startswith("EVID-") for i in ids), "All evidence IDs must be EVID-XXX format"
 
-    print(
-        f"\n[ENTITIES] {len(e.entities)} entities  "
-        f"{len(e.amounts)} amounts  "
-        f"jurisdictions={e.jurisdictions}"
-    )
-    for ent in e.entities:
-        print(f"  • {ent.name} ({ent.entity_type}) — {ent.role}")
+    categories = {item.category for item in items}
+    assert "transaction" in categories, "Must have transaction evidence"
+    assert "pattern" in categories or "analysis" in categories, "Must have pattern/analysis evidence"
+    print(f"\n[EVIDENCE] {len(items)} items, categories={sorted(categories)}")
 
 
-def _assert_risk_assessment(result: PipelineResult) -> None:
-    r = result.risk_assessment
+def _assert_narrative(result: EvidencePipelineResult) -> None:
+    n = result.narrative
+    assert n.case_title, "case_title must not be empty"
+    assert len(n.sections) == 4, f"Expected 4 sections, got {len(n.sections)}"
 
-    assert r.overall_risk_score >= 0.6, (
-        f"Structuring alert should score ≥0.6, got {r.overall_risk_score:.2f}"
-    )
-    assert r.recommended_action in ("investigate", "escalate", "file_sar"), (
-        f"Expected investigate/escalate/file_sar for this alert, got: {r.recommended_action}"
-    )
-    assert len(r.risk_factors) >= 3, (
-        f"Expected ≥3 risk factors for structuring+adverse media+new account, "
-        f"got {len(r.risk_factors)}"
-    )
-
-    # Every risk factor must have evidence
-    for rf in r.risk_factors:
-        assert rf.evidence, f"Risk factor '{rf.factor}' has no evidence"
-        assert 0.0 <= rf.score <= 1.0
-
-    print(
-        f"\n[RISK] score={r.overall_risk_score:.2f}  "
-        f"action={r.recommended_action}  "
-        f"factors={len(r.risk_factors)}"
-    )
-    for rf in r.risk_factors:
-        print(f"  • {rf.factor} ({rf.score:.2f}): {rf.evidence[:80]}…")
-    print(f"  rationale: {r.rationale}")
-
-
-def _assert_investigation_summary(result: PipelineResult) -> None:
-    s: InvestigationSummary = result.investigation_summary
-
-    assert s.case_title, "case_title must not be empty"
-    assert len(s.case_title) <= 80, f"case_title too long ({len(s.case_title)} chars)"
-    assert len(s.key_findings) >= 3, (
-        f"Expected ≥3 key findings for this complex alert, got {len(s.key_findings)}"
-    )
-    assert len(s.evidence_items) >= len(s.key_findings), (
-        "Every key finding must have at least one corresponding evidence_item"
-    )
-    assert len(s.next_steps) >= 2, (
-        f"Expected ≥2 next steps, got {len(s.next_steps)}"
-    )
-
-    # Structuring alert should recommend SAR under POCA 2002
-    assert s.sar_required is True, (
-        "Structuring with adverse media in UK jurisdiction should require SAR"
-    )
-    assert s.sar_grounds, "sar_grounds must be set when sar_required=True"
-
-    # All evidence items must have source citations
-    for ei in s.evidence_items:
-        assert ei.source, f"Evidence item '{ei.description[:40]}' has no source"
-        assert 0.0 <= ei.confidence <= 1.0
-
-    print(f"\n[SUMMARY] '{s.case_title}'")
-    print(f"  SAR required: {s.sar_required}")
-    if s.sar_grounds:
-        print(f"  Grounds: {s.sar_grounds}")
-    print(f"  Key findings ({len(s.key_findings)}):")
-    for f_ in s.key_findings:
-        print(f"    • {f_}")
-    print(f"  Next steps ({len(s.next_steps)}):")
-    for step in s.next_steps:
-        print(f"    → {step}")
-
-
-def _assert_token_usage(result: PipelineResult) -> None:
-    u = result.token_usage
-
-    assert u.total > 0, "Token usage must be positive"
-    assert u.total_input > 0, "Input tokens must be positive"
-    assert u.total_output > 0, "Output tokens must be positive"
-
-    # Each step must have been recorded
-    expected_steps = {
-        "alert_triage",
-        "entity_extraction",
-        "risk_assessment",
-        "investigation_summary",
+    expected_keys = {
+        "subject_information",
+        "suspicious_activity_summary",
+        "detailed_narrative",
+        "supporting_evidence",
     }
-    assert expected_steps == set(u.steps.keys()), (
-        f"Missing steps in token usage: {expected_steps - set(u.steps.keys())}"
+    actual_keys = {s.section_key for s in n.sections}
+    assert actual_keys == expected_keys, f"Section keys mismatch: {actual_keys}"
+
+    assert n.sar_required is True, (
+        "SAR must be required for: structuring + RU nationality + adverse media + new account"
+    )
+    assert n.sar_grounds, "sar_grounds must be set when sar_required=True"
+
+    # All cited IDs must be valid
+    valid_ids = {item.id for item in result.evidence_items}
+    for eid in n.evidence_ids_cited:
+        assert eid in valid_ids, f"Narrative cited non-existent evidence ID: {eid}"
+
+    print(
+        f"\n[NARRATIVE] title={n.case_title!r} sar={n.sar_required} "
+        f"action={n.recommended_action} cited={len(n.evidence_ids_cited)}"
+    )
+    for s in n.sections:
+        print(f"  [{s.section_key}] {s.title} ({len(s.content)} chars)")
+
+
+def _assert_cost(result: EvidencePipelineResult) -> None:
+    usage = result.llm_usage
+    assert usage is not None, "llm_usage must be populated"
+    assert usage.input_tokens > 0
+    assert usage.output_tokens > 0
+    assert usage.cost_usd < 5.0, f"Cost exceeded $5 budget: ${usage.cost_usd:.4f}"
+    assert usage.duration_ms is not None and usage.duration_ms > 0
+    print(
+        f"\n[COST] model={usage.model} in={usage.input_tokens} out={usage.output_tokens} "
+        f"cost=${usage.cost_usd:.4f} duration={usage.duration_ms}ms"
     )
 
-    print(f"\n[TOKENS]\n{u.summary()}")
+
+# ---------------------------------------------------------------------------
+# Print helper
+# ---------------------------------------------------------------------------
 
 
-def _print_results(result: PipelineResult) -> None:
+def _print_results(result: EvidencePipelineResult) -> None:
     print("\n" + "=" * 60)
-    print("FULL PIPELINE RESULT")
+    print("FULL NARRATIVE OUTPUT")
     print("=" * 60)
-    print("\nAlert triage:")
-    print(result.alert_triage.model_dump_json(indent=2))
-    print("\nEntity extraction:")
-    print(result.entity_extraction.model_dump_json(indent=2))
-    print("\nRisk assessment:")
-    print(result.risk_assessment.model_dump_json(indent=2))
-    print("\nInvestigation summary:")
-    print(result.investigation_summary.model_dump_json(indent=2))
+    for section in result.narrative.sections:
+        print(f"\n### {section.title.upper()}")
+        print(section.content)
+    print("\n" + "=" * 60)

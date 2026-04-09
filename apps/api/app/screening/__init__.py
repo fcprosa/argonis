@@ -54,15 +54,18 @@ async def screen(
     supabase_url: str = "",
     supabase_key: str = "",
     opensanctions_api_key: str = "",
+    serper_api_key: str = "",
+    anthropic_api_key: str | None = None,
     organization_id: str | None = None,
     case_id: str | None = None,
     include_ofac: bool = True,
     include_opensanctions: bool = True,
+    include_adverse_media: bool = True,
 ) -> ScreeningResponse:
     """
     Unified screening function: screen(name, dob?, nationality?) → results[].
 
-    Runs OFAC SDN and OpenSanctions in parallel.
+    Runs OFAC SDN, OpenSanctions, and Serper.dev adverse media in parallel.
     Each result includes source_url and list_name.
     Results are cached in screening_results table.
     """
@@ -92,7 +95,19 @@ async def screen(
             )
         )
 
-    # --- Run in parallel ---
+    # --- Adverse media (Serper.dev — 3-5 targeted queries) ---
+    if include_adverse_media and serper_api_key:
+        tasks.append(
+            asyncio.create_task(
+                _screen_adverse_media_safe(
+                    name, serper_api_key, anthropic_api_key, nationality,
+                    supabase_url, supabase_key, organization_id, case_id,
+                ),
+                name="adverse_media",
+            )
+        )
+
+    # --- Run all sources in parallel ---
     if tasks:
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for task, result in zip(tasks, results):
@@ -222,3 +237,64 @@ async def _screen_opensanctions_safe(
     except Exception as exc:
         logger.error("OpenSanctions screening failed for '%s': %s", name, exc)
         return [], "OpenSanctions"
+
+
+async def _screen_adverse_media_safe(
+    name: str,
+    serper_api_key: str,
+    anthropic_api_key: str | None,
+    nationality: str | None,
+    supabase_url: str,
+    supabase_key: str,
+    organization_id: str | None,
+    case_id: str | None,
+) -> tuple[list[ScreeningMatch], str]:
+    """
+    Run Serper.dev adverse media search and convert articles to ScreeningMatch objects.
+
+    Only articles with relevance_score >= 0.5 are returned as hits.
+    Each article's URL and snippet are preserved so analysts can click through.
+    """
+    try:
+        response = await search_adverse_media(
+            name=name,
+            serper_api_key=serper_api_key,
+            anthropic_api_key=anthropic_api_key,
+            nationality=nationality,
+            supabase_url=supabase_url,
+            supabase_key=supabase_key,
+            organization_id=organization_id,
+            case_id=case_id,
+        )
+
+        matches: list[ScreeningMatch] = []
+        for article in response.articles:
+            if article.relevance_score < 0.5:
+                continue
+            matches.append(
+                ScreeningMatch(
+                    matched=True,
+                    confidence=article.relevance_score,
+                    list_name="adverse_media",
+                    match_type="keyword",
+                    entity_name_queried=name,
+                    matched_entry={
+                        "title": article.title,
+                        "snippet": article.snippet,
+                        "query_used": article.query_used,
+                        "claude_summary": article.claude_summary,
+                    },
+                    source_url=article.url,
+                    screened_at=response.screened_at,
+                )
+            )
+
+        logger.info(
+            "Adverse media: entity='%s' articles=%d hits=%d",
+            name, response.total_articles_found, len(matches),
+        )
+        return matches, "adverse_media"
+
+    except Exception as exc:
+        logger.error("Adverse media screening failed for '%s': %s", name, exc)
+        return [], "adverse_media"

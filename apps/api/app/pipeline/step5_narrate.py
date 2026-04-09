@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import time
 from typing import Any, Literal
 
 import anthropic
@@ -26,6 +27,7 @@ from app.pipeline.models import (
     AnalysisResult,
     EvidenceItem,
     GatheredData,
+    LLMUsage,
     NarrativeOutput,
     NarrativeSection,
     ParsedAlert,
@@ -36,6 +38,10 @@ logger = logging.getLogger(__name__)
 
 MODEL = "claude-opus-4-6"
 MAX_TOKENS = 8192
+
+# Pricing as of 2026-04 (USD per token)
+_COST_INPUT_PER_TOKEN = 15.0 / 1_000_000   # $15 / 1M input tokens
+_COST_OUTPUT_PER_TOKEN = 75.0 / 1_000_000  # $75 / 1M output tokens
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +201,12 @@ def build_evidence_package(
 
 
 class _NarrativeSectionInput(BaseModel):
-    section_key: Literal["executive_summary", "background", "findings", "conclusion"]
+    section_key: Literal[
+        "subject_information",
+        "suspicious_activity_summary",
+        "detailed_narrative",
+        "supporting_evidence",
+    ]
     title: str
     content: str = Field(
         description=(
@@ -212,7 +223,10 @@ class _NarrativeToolOutput(BaseModel):
         description="Short case file title, max 80 characters",
     )
     sections: list[_NarrativeSectionInput] = Field(
-        description="Four sections: executive_summary, background, findings, conclusion"
+        description=(
+            "Four sections in order: subject_information, suspicious_activity_summary, "
+            "detailed_narrative, supporting_evidence"
+        )
     )
     sar_required: bool
     sar_grounds: str | None = Field(
@@ -234,7 +248,7 @@ async def narrate(
     parsed: ParsedAlert,
     evidence_items: list[EvidenceItem],
     client: anthropic.AsyncAnthropic,
-) -> NarrativeOutput:
+) -> tuple[NarrativeOutput, LLMUsage]:
     """
     Generate the AML investigation narrative from structured evidence only.
 
@@ -248,33 +262,31 @@ async def narrate(
     valid_ids = {item.id for item in evidence_items}
 
     system_prompt = """\
-You are an expert AML Investigator writing a Suspicious Activity Report (SAR) narrative.
-Your ONLY job is to assemble a formal prose narrative based STRICTLY on the provided `evidence_package`.
+You are a senior AML investigator writing a Suspicious Activity Report (SAR) narrative.
 
-CRITICAL RULES (HALLUCINATION FIREWALL):
-1. DO NOT include any information, names, dates, amounts, typologies, or assumptions that are not explicitly present in the evidence package.
-2. Every single factual claim MUST be followed by its specific evidence ID in brackets. Example: "The subject account received $15,000 on March 1st [EVID-012]."
-3. If evidence is missing or insufficient to complete ANY section, you MUST NOT invent details. Instead, output exactly this phrase for that section: "INSUFFICIENT EVIDENCE — REQUIRES HUMAN INPUT."
-4. Incorporate relevant regulatory frameworks (e.g., BSA/AML, AMLD6, FATF red flags) when describing detected patterns, but ONLY if those specific patterns (e.g., structuring, layering) were flagged in the evidence package.
+CRITICAL RULES:
+1. ONLY reference data provided in the evidence package below. Do not add any information \
+not present in the evidence.
+2. Every factual claim MUST cite a specific evidence_id in brackets, e.g., [EVID-001].
+3. Use proper SAR narrative structure: Subject Information, Summary of Suspicious Activity, \
+Detailed Narrative, Supporting Evidence.
+4. Use regulatory language appropriate for AMLD6 and BSA/AML filings.
+5. If evidence is insufficient for any section, write: \
+"INSUFFICIENT EVIDENCE — REQUIRES HUMAN INPUT"
+6. Include a confidence score (0-100%) at the end of each section based on evidence strength.
+7. Do not speculate. Do not infer beyond what the evidence directly supports.
 
-REQUIRED SAR NARRATIVE STRUCTURE:
-You must output the narrative using the following exact sections. For each section, you must include a "Section Confidence Score" (0-100%) based on the strength, volume, and clarity of the provided evidence.
-
-### 1. Introduction
-[State the reason for the alert/investigation trigger based on the evidence]
-Confidence Score: [X]%
-
-### 2. Subject Information
-[Summarize KYC profiles, account relationships, and any adverse media or sanctions screening results (OFAC, OpenSanctions, PEP) found in the evidence]
-Confidence Score: [X]%
-
-### 3. Suspicious Activity Analysis
-[Detail the specific transaction patterns detected, such as structuring, layering, funnel accounts, velocity anomalies, or geographic risks. Reference specific transactions]
-Confidence Score: [X]%
-
-### 4. Conclusion
-[Provide a final summary of the risk and the facts presented]
-Confidence Score: [X]%\
+SECTION STRUCTURE:
+- subject_information: Account holder identity, KYC profile, beneficial ownership, \
+  nationality, account age, and sanctions/PEP screening results.
+- suspicious_activity_summary: Concise 2-3 sentence executive summary of why this is \
+  suspicious. Suitable for a supervisor read in 30 seconds.
+- detailed_narrative: Full chronological account of the suspicious activity. Reference \
+  each relevant transaction by its evidence ID. Describe detected patterns \
+  (structuring, layering, funnel, velocity spike, geographic risk) using FATF/BSA/AMLD6 \
+  typology language. Cross-reference screening hits.
+- supporting_evidence: List the key evidence items cited, their categories, and how each \
+  supports the SAR filing decision.\
 """
 
     user_prompt = (
@@ -294,15 +306,17 @@ Confidence Score: [X]%\
 
     logger.info("▶ step=narrate evidence_items=%d alert=%s", len(evidence_items), parsed.alert_id)
 
+    t0 = time.monotonic()
     async with client.messages.stream(
         model=MODEL,
         max_tokens=MAX_TOKENS,
         system=system_prompt,
-        tools=[tool],
+        tools=[tool],  # type: ignore[arg-type]
         tool_choice={"type": "tool", "name": "submit_narrative"},
         messages=[{"role": "user", "content": user_prompt}],
     ) as stream:
         message = await stream.get_final_message()
+    duration_ms = int((time.monotonic() - t0) * 1000)
 
     tool_block = next((b for b in message.content if b.type == "tool_use"), None)
     if tool_block is None:
@@ -319,15 +333,31 @@ Confidence Score: [X]%\
     if invalid:
         logger.warning("step=narrate stripped non-existent evidence IDs: %s", invalid)
 
+    in_tok = message.usage.input_tokens
+    out_tok = message.usage.output_tokens
+    cost = round(in_tok * _COST_INPUT_PER_TOKEN + out_tok * _COST_OUTPUT_PER_TOKEN, 6)
+
     logger.info(
-        "  ✓ step=narrate title=%r sections=%d sar=%s cited=%d",
+        "  ✓ step=narrate title=%r sections=%d sar=%s cited=%d in_tok=%d out_tok=%d cost=$%.4f",
         validated.case_title,
         len(validated.sections),
         validated.sar_required,
         len(cited),
+        in_tok,
+        out_tok,
+        cost,
     )
 
-    return NarrativeOutput(
+    usage = LLMUsage(
+        model=MODEL,
+        step="narrate",
+        input_tokens=in_tok,
+        output_tokens=out_tok,
+        cost_usd=cost,
+        duration_ms=duration_ms,
+    )
+
+    narrative = NarrativeOutput(
         case_title=validated.case_title,
         sections=[
             NarrativeSection(
@@ -342,6 +372,7 @@ Confidence Score: [X]%\
         recommended_action=validated.recommended_action,
         evidence_ids_cited=cited,
     )
+    return narrative, usage
 
 
 # ---------------------------------------------------------------------------

@@ -860,35 +860,32 @@ export function riskLabel(score: number): string {
   return "LOW";
 }
 
-/** Get severity colour classes */
+/** Get severity colour classes — dark theme */
 export function riskColors(score: number): string {
   if (score >= 0.85)
-    return "bg-red-100 text-red-700 ring-1 ring-red-300";
+    return "bg-danger-subtle text-danger-DEFAULT ring-1 ring-danger-DEFAULT/30";
   if (score >= 0.65)
-    return "bg-orange-100 text-orange-700 ring-1 ring-orange-300";
+    return "bg-warn-subtle text-warn-DEFAULT ring-1 ring-warn-DEFAULT/30";
   if (score >= 0.40)
-    return "bg-yellow-100 text-yellow-700 ring-1 ring-yellow-300";
-  return "bg-gray-100 text-gray-600 ring-1 ring-gray-300";
+    return "bg-accent-subtle text-accent-DEFAULT ring-1 ring-accent-DEFAULT/30";
+  return "bg-surface-3 text-text-muted ring-1 ring-border";
 }
 
-/** Map case status to display label + colour */
+/** Map case status to display label + colour — dark theme */
 export function statusMeta(
   status: string,
 ): { label: string; classes: string } {
   switch (status) {
     case "open":
-      return { label: "Pending", classes: "bg-gray-100 text-gray-600" };
+      return { label: "Pending", classes: "bg-surface-3 text-text-muted" };
     case "in_review":
-      return { label: "In Review", classes: "bg-blue-100 text-blue-700" };
+      return { label: "In Review", classes: "bg-accent-subtle text-accent-DEFAULT" };
     case "escalated":
-      return {
-        label: "Escalated",
-        classes: "bg-orange-100 text-orange-700",
-      };
+      return { label: "Escalated", classes: "bg-warn-subtle text-warn-DEFAULT" };
     case "closed":
-      return { label: "Closed", classes: "bg-green-100 text-green-700" };
+      return { label: "Closed", classes: "bg-success-subtle text-success-DEFAULT" };
     default:
-      return { label: status, classes: "bg-gray-100 text-gray-500" };
+      return { label: status, classes: "bg-surface-3 text-text-muted" };
   }
 }
 

@@ -17,54 +17,67 @@ export default function DashboardLayout({
   const pathname = usePathname();
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F8F8F8]">
-      {/* Sidebar */}
-      <aside className="flex w-[220px] shrink-0 flex-col bg-[#111] text-white">
-        {/* Logo */}
-        <div className="flex h-14 items-center border-b border-white/10 px-5">
-          <span className="text-sm font-semibold tracking-widest text-white/90 uppercase">
-            Argonis
-          </span>
-        </div>
-
-        {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5">
-          {NAV_ITEMS.map((item) => {
-            const active =
-              item.href === "/dashboard"
-                ? pathname === "/dashboard"
-                : pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={[
-                  "flex items-center gap-3 rounded px-3 py-2 text-sm transition-colors",
-                  active
-                    ? "bg-white/10 text-white"
-                    : "text-white/50 hover:bg-white/5 hover:text-white/80",
-                ].join(" ")}
-              >
-                <span className="text-xs opacity-60">{item.icon}</span>
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Footer */}
-        <div className="border-t border-white/10 px-5 py-4">
-          <p className="text-[11px] text-white/30 leading-relaxed">
-            AML Investigation Platform
+    <>
+      {/* Mobile fallback — dashboard is desktop-first (≥1024px) */}
+      <div className="flex min-h-screen items-center justify-center bg-surface-base px-6 lg:hidden">
+        <div className="max-w-xs text-center">
+          <div className="mb-4 font-mono text-2xl text-accent-DEFAULT">⬡</div>
+          <p className="text-sm font-medium text-white">Desktop required</p>
+          <p className="mt-2 text-xs text-text-muted leading-relaxed">
+            Argonis is optimised for desktop browsers (1024px+). Please open
+            this page on a larger screen.
           </p>
-          <p className="text-[11px] text-white/20">v0.1 · demo</p>
         </div>
-      </aside>
+      </div>
 
-      {/* Content */}
-      <main className="flex flex-1 flex-col overflow-hidden">
-        {children}
-      </main>
-    </div>
+      {/* Desktop layout */}
+      <div className="hidden h-screen overflow-hidden bg-surface-base lg:flex">
+        {/* Sidebar */}
+        <aside className="flex w-[200px] shrink-0 flex-col border-r border-border bg-surface-1">
+          {/* Logo */}
+          <div className="flex h-12 items-center border-b border-border px-4">
+            <span className="font-mono text-[13px] font-medium tracking-widest text-accent-DEFAULT uppercase">
+              Argonis
+            </span>
+          </div>
+
+          {/* Nav */}
+          <nav className="flex-1 px-2 py-3 space-y-px">
+            {NAV_ITEMS.map((item) => {
+              const active =
+                item.href === "/dashboard"
+                  ? pathname === "/dashboard"
+                  : pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={[
+                    "flex items-center gap-2.5 rounded px-2.5 py-1.5 text-xs transition-colors",
+                    active
+                      ? "bg-surface-3 text-white"
+                      : "text-text-muted hover:bg-surface-2 hover:text-white",
+                  ].join(" ")}
+                >
+                  <span className="text-[10px] opacity-50">{item.icon}</span>
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+
+          {/* Footer */}
+          <div className="border-t border-border px-4 py-3">
+            <p className="text-[10px] uppercase tracking-wider text-text-faint">
+              AML Platform
+            </p>
+            <p className="text-[10px] text-text-faint opacity-50">v0.1 · demo</p>
+          </div>
+        </aside>
+
+        {/* Content */}
+        <main className="flex flex-1 flex-col overflow-hidden">{children}</main>
+      </div>
+    </>
   );
 }

@@ -107,7 +107,7 @@ class ScreeningHit(BaseModel):
     entity_name: str
     list_name: str  # "OFAC_SDN", "UN_CONSOLIDATED", "PEP", "adverse_media"
     match_confidence: float = Field(ge=0.0, le=1.0)
-    match_type: Literal["exact", "fuzzy", "alias", "keyword"]
+    match_type: Literal["exact", "fuzzy", "alias", "phonetic", "keyword"]
     source_url: str | None = None
     snippet: str | None = None
     screened_at: datetime
@@ -177,7 +177,7 @@ class EvidenceItem(BaseModel):
 
 
 class NarrativeSection(BaseModel):
-    section_key: str  # "executive_summary" | "background" | "findings" | "conclusion"
+    section_key: str  # subject_information | suspicious_activity_summary | detailed_narrative | supporting_evidence
     title: str
     content: str  # prose with inline [EVID-XXX] citations
 
@@ -192,6 +192,19 @@ class NarrativeOutput(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# LLM usage / cost tracking
+# ---------------------------------------------------------------------------
+
+
+class LLMUsage(BaseModel):
+    model: str
+    step: str
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    duration_ms: int | None = None
+
+
 # Pipeline result
 # ---------------------------------------------------------------------------
 
@@ -205,3 +218,4 @@ class EvidencePipelineResult(BaseModel):
     analysis_result: AnalysisResult
     evidence_items: list[EvidenceItem]
     narrative: NarrativeOutput
+    llm_usage: LLMUsage | None = None

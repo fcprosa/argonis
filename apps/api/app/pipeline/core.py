@@ -47,11 +47,13 @@ class EvidencePipeline:
         supabase_url: str = "",
         supabase_key: str = "",
         opensanctions_api_key: str = "",
+        serper_api_key: str = "",
     ) -> None:
         self._client = anthropic.AsyncAnthropic(api_key=api_key)
         self._supabase_url = supabase_url
         self._supabase_key = supabase_key
         self._opensanctions_api_key = opensanctions_api_key
+        self._serper_api_key = serper_api_key
 
     async def run(self, alert: dict[str, Any]) -> EvidencePipelineResult:
         """Run all 5 steps sequentially. Steps 1-4 are deterministic; Step 5 calls the LLM."""
@@ -86,6 +88,8 @@ class EvidencePipeline:
         screening = await screen_entities(
             parsed,
             opensanctions_api_key=self._opensanctions_api_key,
+            serper_api_key=self._serper_api_key,
+            anthropic_api_key=self._client.api_key,
             supabase_url=self._supabase_url,
             supabase_key=self._supabase_key,
         )
@@ -122,14 +126,7 @@ class EvidencePipeline:
 
         # ── Step 5: NARRATE (LLM) ────────────────────────────────────────────
         logger.info("▶ step=5/5 narrate (LLM)")
-        narrative = await narrate(parsed, evidence_items, self._client)
-        logger.info(
-            "  ✓ step=narrate title=%r sar=%s action=%s cited=%d",
-            narrative.case_title,
-            narrative.sar_required,
-            narrative.recommended_action,
-            len(narrative.evidence_ids_cited),
-        )
+        narrative, llm_usage = await narrate(parsed, evidence_items, self._client)
 
         return EvidencePipelineResult(
             parsed_alert=parsed,
@@ -138,4 +135,5 @@ class EvidencePipeline:
             analysis_result=analysis,
             evidence_items=evidence_items,
             narrative=narrative,
+            llm_usage=llm_usage,
         )
