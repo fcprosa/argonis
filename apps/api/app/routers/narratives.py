@@ -435,8 +435,33 @@ async def export_narrative_pdf(
     except Exception:
         audit_entries = []
 
+    # ── Detect partial screening from investigation steps ─────────────────
+    is_partial_screening = False
+    screening_gaps: list[str] = []
+    try:
+        screen_step_res = await (
+            db.table("investigation_steps")
+            .select("status, source_data")
+            .eq("case_id", case_id)
+            .eq("name", "screen")
+            .limit(1)
+            .execute()
+        )
+        if screen_step_res.data:
+            step = screen_step_res.data[0]
+            if step.get("status") == "completed_with_warnings":
+                is_partial_screening = True
+                src_data = step.get("source_data") or {}
+                screening_gaps = src_data.get("coverage_gaps", [])
+    except Exception:
+        pass
+
     # ── Build PDF ──────────────────────────────────────────────────────────
-    pdf_bytes = build_narrative_pdf(nar, sections, case, screening, audit_entries)
+    pdf_bytes = build_narrative_pdf(
+        nar, sections, case, screening, audit_entries,
+        is_partial_screening=is_partial_screening,
+        screening_gaps=screening_gaps,
+    )
 
     filename = f"narrative-{narrative_id[-8:]}.pdf"
     return StreamingResponse(

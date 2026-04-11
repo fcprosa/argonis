@@ -510,9 +510,9 @@ class TestLayeringCheck:
 
     def test_detected_via_linked_accounts(self) -> None:
         rel = AccountRelationship(
-            account_number="1111",
-            relationship_type="same_beneficial_owner",
-            linked_account="2222",
+            source_customer_id="1111",
+            related_customer_id="2222",
+            relationship_type="beneficial_owner",
             source="stub",
         )
         result = layering_check([], counterparties_text="known", account_relationships=[rel])
@@ -537,7 +537,8 @@ class TestLayeringCheck:
 
     def test_confidence_increases_with_multiple_indicators(self) -> None:
         rel = AccountRelationship(
-            account_number="X", relationship_type="t", linked_account="Y", source="stub"
+            source_customer_id="X", related_customer_id="Y",
+            relationship_type="beneficial_owner", source="stub",
         )
         # Unknown counterparty only
         r1 = layering_check([], counterparties_text="unknown")

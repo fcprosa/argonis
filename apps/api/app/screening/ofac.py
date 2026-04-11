@@ -58,15 +58,23 @@ async def download_sdn_csv(
     timeout: float = 60.0,
 ) -> str:
     """Download the OFAC SDN CSV file. Returns raw text content."""
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
         response = await client.get(url)
         response.raise_for_status()
         return response.text
 
 
+def _detect_delimiter(raw_csv: str) -> str:
+    """Auto-detect CSV delimiter: pipe for legacy Treasury.gov, comma for new API."""
+    first_line = raw_csv.split("\n", 1)[0]
+    if "|" in first_line:
+        return "|"
+    return ","
+
+
 def parse_sdn_csv(raw_csv: str) -> list[dict[str, str]]:
     """
-    Parse the pipe-delimited SDN CSV.
+    Parse the SDN CSV (auto-detects pipe or comma delimiter).
 
     Columns (from OFAC documentation):
       0: ent_num — Entity number (unique per entry)
@@ -82,7 +90,8 @@ def parse_sdn_csv(raw_csv: str) -> list[dict[str, str]]:
      10: Vess_owner
      11: Remarks
     """
-    reader = csv.reader(io.StringIO(raw_csv), delimiter="|")
+    delimiter = _detect_delimiter(raw_csv)
+    reader = csv.reader(io.StringIO(raw_csv), delimiter=delimiter)
     entries: list[dict[str, str]] = []
 
     for row in reader:
@@ -112,7 +121,7 @@ def parse_sdn_csv(raw_csv: str) -> list[dict[str, str]]:
 
 def parse_alt_csv(raw_csv: str) -> list[dict[str, str]]:
     """
-    Parse the pipe-delimited alternate names CSV.
+    Parse the alternate names CSV (auto-detects pipe or comma delimiter).
 
     Columns:
       0: ent_num — Entity number (FK to sdn_entries)
@@ -121,7 +130,8 @@ def parse_alt_csv(raw_csv: str) -> list[dict[str, str]]:
       3: alt_name — The alternate name
       4: alt_remarks
     """
-    reader = csv.reader(io.StringIO(raw_csv), delimiter="|")
+    delimiter = _detect_delimiter(raw_csv)
+    reader = csv.reader(io.StringIO(raw_csv), delimiter=delimiter)
     entries: list[dict[str, str]] = []
 
     for row in reader:

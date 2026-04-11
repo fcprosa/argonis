@@ -1,0 +1,28 @@
+{
+  "alert_id": "GOLDEN-VELOCITY-001",
+  "alert_type": "velocity_anomaly",
+  "generated_at": "2026-04-04T16:20:00Z",
+  "account_number": "5510-3387-9102",
+  "account_holder": "TESTCASE_Ironclad Fabrication Corp",
+  "jurisdiction": "US",
+  "transactions": [
+    { "date": "2026-03-15", "amount": 60000, "currency": "USD", "type": "cash_deposit", "branch": "Industrial Blvd" },
+    { "date": "2026-03-15", "amount": 55000, "currency": "USD", "type": "cash_deposit", "branch": "Harbor Point" },
+    { "date": "2026-03-15", "amount": 50000, "currency": "USD", "type": "wire_transfer", "counterparty": "TESTCASE_Keystone Supply Co" },
+    { "date": "2026-03-16", "amount": 65000, "currency": "USD", "type": "cash_deposit", "branch": "Riverdale" },
+    { "date": "2026-03-16", "amount": 70000, "currency": "USD", "type": "cash_deposit", "branch": "Industrial Blvd" },
+    { "date": "2026-03-16", "amount": 45000, "currency": "USD", "type": "wire_transfer", "counterparty": "TESTCASE_Atlas Equipment Ltd" },
+    { "date": "2026-03-16", "amount": 50000, "currency": "USD", "type": "cash_deposit", "branch": "Harbor Point" },
+    { "date": "2026-03-16", "amount": 55000, "currency": "USD", "type": "cash_deposit", "branch": "Riverdale" }
+  ],
+  "counterparties": "Payroll vendor TESTCASE_Keystone Supply Co and equipment supplier TESTCASE_Atlas Equipment Ltd. Cash deposits have no identifiable originator.",
+  "account_age_days": 730,
+  "prior_sar_count": 0,
+  "beneficial_owner": "TESTCASE_Harold E. Briggs (DOB: 1972-09-08, nationality: US)",
+  "business_type": "Metal fabrication and welding services",
+  "expected_monthly_activity": "Standard payroll and vendor payments, max USD 50,000/month",
+  "actual_activity_30d": "USD 450,000 across 8 transactions in 48 hours after 90+ days of near-zero activity. Six large cash deposits at three branches plus two outbound wire transfers.",
+  "screening_hits": "None",
+  "sanctions_hits": "None",
+  "pep_hits": "None"
+}

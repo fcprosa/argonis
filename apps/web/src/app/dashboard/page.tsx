@@ -26,6 +26,8 @@ export default function AlertQueuePage() {
   const [sort, setSort] = useState<SortKey>("risk");
   const [demoMode, setDemoMode] = useState(false);
 
+  const isDemoAllowed = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+
   const loadCases = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -40,20 +42,28 @@ export default function AlertQueuePage() {
       setRiskScores(scores);
       setDemoMode(false);
     } catch {
-      setError("API unreachable — showing sample data.");
-      setCases(SAMPLE_CASES);
-      setRiskScores(SAMPLE_RISK_SCORES);
-      setDemoMode(true);
+      if (isDemoAllowed) {
+        setError("API unreachable — showing sample data.");
+        setCases(SAMPLE_CASES);
+        setRiskScores(SAMPLE_RISK_SCORES);
+        setDemoMode(true);
+      } else {
+        setError("Unable to reach investigation API. Check your connection or contact support.");
+        setCases([]);
+        setRiskScores({});
+        setDemoMode(false);
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isDemoAllowed]);
 
   useEffect(() => {
     loadCases();
   }, [loadCases]);
 
   function loadSampleData() {
+    if (!isDemoAllowed) return;
     setCases(SAMPLE_CASES);
     setRiskScores(SAMPLE_RISK_SCORES);
     setDemoMode(true);
@@ -87,12 +97,14 @@ export default function AlertQueuePage() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={loadSampleData}
-            className="rounded border border-border px-2.5 py-1 text-[11px] font-medium text-text-muted transition-colors hover:border-border-strong hover:text-white"
-          >
-            Sample Data
-          </button>
+          {isDemoAllowed && (
+            <button
+              onClick={loadSampleData}
+              className="rounded border border-border px-2.5 py-1 text-[11px] font-medium text-text-muted transition-colors hover:border-border-strong hover:text-white"
+            >
+              Sample Data
+            </button>
+          )}
           <button
             onClick={() => router.push("/dashboard/upload")}
             className="rounded bg-accent-DEFAULT px-2.5 py-1 text-[11px] font-semibold text-surface-base transition-colors hover:bg-accent-hover"
@@ -102,10 +114,19 @@ export default function AlertQueuePage() {
         </div>
       </header>
 
+      {/* Demo data banner — persistent, not dismissible */}
+      {demoMode && (
+        <div className="shrink-0 bg-red-900 px-5 py-2.5 border-b border-red-800">
+          <p className="text-sm font-semibold text-white">
+            ⚠ DEMO DATA — NOT REAL PIPELINE OUTPUT. API unreachable or demo mode enabled.
+          </p>
+        </div>
+      )}
+
       {/* Error / info banner */}
-      {error && (
-        <div className="shrink-0 border-b border-warn-subtle bg-warn-subtle px-5 py-1.5">
-          <p className="text-[11px] text-warn-DEFAULT">{error}</p>
+      {error && !demoMode && (
+        <div className="shrink-0 border-b border-red-200 bg-red-50 px-5 py-2.5">
+          <p className="text-xs font-medium text-red-700">{error}</p>
         </div>
       )}
 
@@ -150,7 +171,7 @@ export default function AlertQueuePage() {
         {loading ? (
           <LoadingSkeleton />
         ) : cases.length === 0 ? (
-          <EmptyState onSample={loadSampleData} />
+          <EmptyState onSample={isDemoAllowed ? loadSampleData : undefined} />
         ) : (
           <table className="w-full border-collapse text-xs">
             <thead className="sticky top-0 z-10 bg-surface-1">
@@ -268,19 +289,23 @@ function LoadingSkeleton() {
   );
 }
 
-function EmptyState({ onSample }: { onSample: () => void }) {
+function EmptyState({ onSample }: { onSample?: (() => void) | undefined }) {
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center">
       <p className="text-xs text-text-muted">No cases found.</p>
       <p className="mt-1 text-[11px] text-text-faint">
-        Connect the API or load sample data to get started.
+        {onSample
+          ? "Connect the API or load sample data to get started."
+          : "Connect the API to get started."}
       </p>
-      <button
-        onClick={onSample}
-        className="mt-5 rounded border border-border px-4 py-1.5 text-[11px] font-medium text-text-muted transition-colors hover:border-border-strong hover:text-white"
-      >
-        Try Sample Data
-      </button>
+      {onSample && (
+        <button
+          onClick={onSample}
+          className="mt-5 rounded border border-border px-4 py-1.5 text-[11px] font-medium text-text-muted transition-colors hover:border-border-strong hover:text-white"
+        >
+          Try Sample Data
+        </button>
+      )}
     </div>
   );
 }

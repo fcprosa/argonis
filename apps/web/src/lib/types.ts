@@ -21,7 +21,7 @@ export interface InvestigationStep {
   organization_id: string;
   name: "parse" | "gather" | "screen" | "analyze" | "pipeline_error";
   description: string;
-  status: "completed" | "failed";
+  status: "completed" | "completed_with_warnings" | "failed";
   source_data: Record<string, unknown> | null;
   confidence_score: number | null;
   created_by: string;
@@ -44,9 +44,15 @@ export interface ScreeningResult {
   created_at: string;
 }
 
+export type SectionKey =
+  | "subject_information"
+  | "suspicious_activity_summary"
+  | "detailed_narrative"
+  | "supporting_evidence";
+
 export interface NarrativeSection {
   id: string;
-  section_key: string;
+  section_key: SectionKey | (string & {});
   title: string;
   content: string;
   order_index: number;
@@ -62,6 +68,8 @@ export interface NarrativeRow {
   title: string;
   status: "draft" | "in_review" | "approved" | "rejected";
   narrative_sections: NarrativeSection[];
+  is_partial_screening?: boolean;
+  screening_gaps?: string[];
   created_by: string;
   created_at: string;
   updated_at: string;

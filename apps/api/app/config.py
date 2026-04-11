@@ -25,5 +25,8 @@ class Settings(BaseSettings):
     # Serper.dev (adverse media search)
     serper_api_key: str = ""  # https://serper.dev — Google search API
 
+    # Redis (optional — for multi-instance rate limiting)
+    redis_url: str = ""
+
 
 settings = Settings()

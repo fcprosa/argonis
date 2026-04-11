@@ -17,11 +17,12 @@ from __future__ import annotations
 
 import copy
 import logging
+import re
 import time
 from typing import Any, Literal
 
 import anthropic
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.pipeline.models import (
     AnalysisResult,
@@ -32,6 +33,7 @@ from app.pipeline.models import (
     NarrativeSection,
     ParsedAlert,
     ScreeningBundle,
+    SectionFirewallResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,6 +44,8 @@ MAX_TOKENS = 8192
 # Pricing as of 2026-04 (USD per token)
 _COST_INPUT_PER_TOKEN = 15.0 / 1_000_000   # $15 / 1M input tokens
 _COST_OUTPUT_PER_TOKEN = 75.0 / 1_000_000  # $75 / 1M output tokens
+
+_EVID_PATTERN = re.compile(r"\[(EVID-\d{3,})\]")
 
 
 # ---------------------------------------------------------------------------
@@ -125,17 +129,33 @@ def build_evidence_package(
     # ---- Step 2: KYC profiles ----
     for kyc in gathered.kyc_profiles:
         owners = ", ".join(kyc.beneficial_owners) if kyc.beneficial_owners else "N/A"
+        parts = [
+            f"type={kyc.entity_type}, tier={kyc.kyc_tier}",
+            f"country={kyc.registration_country or 'unknown'}",
+            f"beneficial_owners=[{owners}]",
+            f"last_reviewed={kyc.last_reviewed or 'unknown'}",
+        ]
+        if kyc.pep_status:
+            parts.append(f"pep_status={kyc.pep_status}")
+        if kyc.risk_rating:
+            parts.append(f"risk_rating={kyc.risk_rating}")
+        if kyc.occupation:
+            parts.append(f"occupation={kyc.occupation}")
+        if kyc.source_of_funds:
+            parts.append(f"source_of_funds={kyc.source_of_funds}")
+        if kyc.is_synthetic:
+            parts.append("WARNING: synthetic profile — no KYC on file")
         add(
             "kyc",
             f"KYC profile: {kyc.entity_name}",
-            (
-                f"type={kyc.entity_type}, tier={kyc.kyc_tier}, "
-                f"country={kyc.registration_country or 'unknown'}, "
-                f"beneficial_owners=[{owners}], "
-                f"last_reviewed={kyc.last_reviewed or 'unknown'}"
-            ),
+            ", ".join(parts),
             "step2_gather",
+            0.5 if kyc.is_synthetic else 1.0,
         )
+
+    # ---- Step 2: data gaps ----
+    for gap in gathered.data_gaps:
+        add("data_gap", "Data gap warning", gap, "step2_gather", 0.0)
 
     # ---- Step 3: screening hits ----
     if screening.hits:
@@ -196,6 +216,34 @@ def build_evidence_package(
 
 
 # ---------------------------------------------------------------------------
+# LLM output truncation helper
+# ---------------------------------------------------------------------------
+
+
+def _truncate_with_log(value: object, *, max_len: int, field_name: str) -> object:
+    """Truncate LLM string output to max_len with ellipsis + log warning.
+
+    Pydantic max_length raises on overflow, which is brittle for LLM output.
+    This helper truncates instead, logs at WARNING so prompt tightening is
+    tracked, and preserves the first max_len-1 characters plus a single
+    ellipsis character for a total length of exactly max_len.
+    """
+    if not isinstance(value, str):
+        return value
+    if len(value) <= max_len:
+        return value
+    logger.warning(
+        "narrative field %r exceeded %d chars (got %d) — truncating. "
+        "Consider tightening the step5_narrate prompt. Original prefix: %r",
+        field_name,
+        max_len,
+        len(value),
+        value[:250],
+    )
+    return value[: max_len - 1] + "…"
+
+
+# ---------------------------------------------------------------------------
 # Internal schema for LLM forced tool use
 # ---------------------------------------------------------------------------
 
@@ -219,9 +267,14 @@ class _NarrativeSectionInput(BaseModel):
 
 class _NarrativeToolOutput(BaseModel):
     case_title: str = Field(
-        max_length=80,
+        max_length=200,
         description="Short case file title, max 80 characters",
     )
+
+    @field_validator("case_title", mode="before")
+    @classmethod
+    def _truncate_case_title(cls, v: object) -> object:
+        return _truncate_with_log(v, max_len=200, field_name="case_title")
     sections: list[_NarrativeSectionInput] = Field(
         description=(
             "Four sections in order: subject_information, suspicious_activity_summary, "
@@ -248,16 +301,19 @@ async def narrate(
     parsed: ParsedAlert,
     evidence_items: list[EvidenceItem],
     client: anthropic.AsyncAnthropic,
-) -> tuple[NarrativeOutput, LLMUsage]:
+    coverage_gaps: list[str] | None = None,
+    data_gaps: list[str] | None = None,
+) -> tuple[NarrativeOutput, LLMUsage, list[SectionFirewallResult]]:
     """
     Generate the AML investigation narrative from structured evidence only.
 
-    The LLM:
-      MAY  — write prose connecting evidence items, cite [EVID-XXX] inline
-      MAY  — recommend actions supported by the evidence
-      MAY NOT — state any fact not present in the evidence list
-      MAY NOT — introduce entities, amounts, or dates not in evidence
-      MAY NOT — cite non-existent evidence IDs (validation strips them)
+    Returns ``(narrative, llm_usage, firewall_results)`` where
+    ``firewall_results`` records which evidence IDs were kept vs. stripped
+    from the inline citations *per section*.
+
+    Ordering guarantee: the firewall pass runs BEFORE the return — the
+    caller receives cleaned section content and can write everything to
+    the DB in a single logical transaction.
     """
     valid_ids = {item.id for item in evidence_items}
 
@@ -289,9 +345,42 @@ SECTION STRUCTURE:
   supports the SAR filing decision.\
 """
 
+    coverage_warning_block = ""
+    if coverage_gaps:
+        gap_bullets = "\n".join(f"  - {gap}" for gap in coverage_gaps)
+        coverage_warning_block = (
+            "\n\n=== SCREENING COVERAGE WARNING ===\n"
+            "The following screening sources were unavailable during this investigation:\n"
+            f"{gap_bullets}\n\n"
+            'You MUST include a section in the narrative titled "Screening Coverage '
+            'Limitations" that explicitly states which sources were unavailable and '
+            "recommends that a human analyst supplement with manual screening before "
+            "filing.\n"
+            "=== END WARNING ===\n"
+        )
+
+    kyc_warning_block = ""
+    if data_gaps:
+        kyc_warning_block = (
+            "\n\n=== KYC DATA WARNING ===\n"
+            "Subject KYC profile was not found in the customer database at the time "
+            "of investigation. The findings below are based on transaction patterns "
+            "and screening results only. A full KYC review is required before "
+            "regulatory filing.\n\n"
+            "You MUST include the following verbatim text at the start of the "
+            '"Subject Information" section:\n'
+            '"Subject KYC profile was not found in the customer database at the time '
+            "of investigation. The findings below are based on transaction patterns "
+            "and screening results only. A full KYC review is required before "
+            'regulatory filing."\n'
+            "=== END KYC WARNING ===\n"
+        )
+
     user_prompt = (
         f"Write an AML investigation narrative for alert {parsed.alert_id}.\n\n"
-        f"{_format_evidence(evidence_items)}\n\n"
+        f"{_format_evidence(evidence_items)}"
+        f"{coverage_warning_block}"
+        f"{kyc_warning_block}\n\n"
         "Produce a structured narrative with all four required sections. "
         "Cite every fact with [EVID-XXX]. "
         "State whether a SAR must be filed and the legal grounds."
@@ -327,22 +416,35 @@ SECTION STRUCTURE:
     raw: dict[str, Any] = tool_block.input  # type: ignore[union-attr]
     validated = _NarrativeToolOutput(**raw)
 
-    # Strip any hallucinated evidence IDs the LLM invented
-    cited = [eid for eid in validated.evidence_ids_cited if eid in valid_ids]
-    invalid = [eid for eid in validated.evidence_ids_cited if eid not in valid_ids]
-    if invalid:
-        logger.warning("step=narrate stripped non-existent evidence IDs: %s", invalid)
+    # ── Evidence firewall: parse + strip invalid [EVID-XXX] from content ──
+    cleaned_sections, firewall_results = _run_evidence_firewall(
+        validated.sections, valid_ids,
+    )
+
+    all_kept: set[str] = set()
+    all_stripped: set[str] = set()
+    for fw in firewall_results:
+        all_kept.update(fw.kept_ids)
+        all_stripped.update(fw.stripped_ids)
+    if all_stripped:
+        logger.warning(
+            "step=narrate firewall stripped %d non-existent evidence IDs: %s",
+            len(all_stripped),
+            sorted(all_stripped),
+        )
 
     in_tok = message.usage.input_tokens
     out_tok = message.usage.output_tokens
     cost = round(in_tok * _COST_INPUT_PER_TOKEN + out_tok * _COST_OUTPUT_PER_TOKEN, 6)
 
     logger.info(
-        "  ✓ step=narrate title=%r sections=%d sar=%s cited=%d in_tok=%d out_tok=%d cost=$%.4f",
+        "  ✓ step=narrate title=%r sections=%d sar=%s "
+        "cited_kept=%d cited_stripped=%d in_tok=%d out_tok=%d cost=$%.4f",
         validated.case_title,
         len(validated.sections),
         validated.sar_required,
-        len(cited),
+        len(all_kept),
+        len(all_stripped),
         in_tok,
         out_tok,
         cost,
@@ -359,20 +461,63 @@ SECTION STRUCTURE:
 
     narrative = NarrativeOutput(
         case_title=validated.case_title,
-        sections=[
-            NarrativeSection(
-                section_key=s.section_key,
-                title=s.title,
-                content=s.content,
-            )
-            for s in validated.sections
-        ],
+        sections=cleaned_sections,
         sar_required=validated.sar_required,
         sar_grounds=validated.sar_grounds,
         recommended_action=validated.recommended_action,
-        evidence_ids_cited=cited,
+        evidence_ids_cited=sorted(all_kept),
     )
-    return narrative, usage
+    return narrative, usage, firewall_results
+
+
+# ---------------------------------------------------------------------------
+# Evidence firewall
+# ---------------------------------------------------------------------------
+
+
+def _run_evidence_firewall(
+    sections: list[_NarrativeSectionInput],
+    valid_ids: set[str],
+) -> tuple[list[NarrativeSection], list[SectionFirewallResult]]:
+    """Parse inline ``[EVID-XXX]`` citations, strip invalid ones.
+
+    Returns cleaned :class:`NarrativeSection` objects (content scrubbed of
+    invalid citations) and per-section :class:`SectionFirewallResult` records
+    for the strip log.
+    """
+    cleaned_sections: list[NarrativeSection] = []
+    firewall_results: list[SectionFirewallResult] = []
+
+    for s in sections:
+        cited_ids = set(_EVID_PATTERN.findall(s.content))
+
+        kept = sorted(cited_ids & valid_ids)
+        stripped = sorted(cited_ids - valid_ids)
+
+        cleaned_content = s.content
+        for eid in stripped:
+            cleaned_content = cleaned_content.replace(f"[{eid}]", "")
+        cleaned_content = re.sub(r" {2,}", " ", cleaned_content)
+        cleaned_content = re.sub(r" ([.,;:!?])", r"\1", cleaned_content)
+
+        total = len(kept) + len(stripped)
+        cleaned_sections.append(
+            NarrativeSection(
+                section_key=s.section_key,
+                title=s.title,
+                content=cleaned_content,
+            )
+        )
+        firewall_results.append(
+            SectionFirewallResult(
+                section_key=s.section_key,
+                kept_ids=kept,
+                stripped_ids=stripped,
+                strip_rate=len(stripped) / total if total > 0 else 0.0,
+            )
+        )
+
+    return cleaned_sections, firewall_results
 
 
 # ---------------------------------------------------------------------------

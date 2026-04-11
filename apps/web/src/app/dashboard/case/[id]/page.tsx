@@ -41,7 +41,8 @@ export default function CaseDetailPage({
   params: { id: string };
 }) {
   const { id } = params;
-  const detail: CaseDetail | undefined = SAMPLE_CASE_DETAIL[id];
+  const isDemoAllowed = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+  const detail: CaseDetail | undefined = isDemoAllowed ? SAMPLE_CASE_DETAIL[id] : undefined;
 
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [pipelineSteps, setPipelineSteps] = useState<PipelineStepRuntime[]>(
@@ -366,7 +367,14 @@ export default function CaseDetailPage({
   if (!detail) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3">
-        <p className="text-sm text-gray-500">Case not found: {id}</p>
+        {isDemoAllowed ? (
+          <p className="text-sm text-gray-500">Case not found: {id}</p>
+        ) : (
+          <>
+            <p className="text-sm font-medium text-red-700">Unable to reach investigation API.</p>
+            <p className="text-xs text-gray-500">Check your connection or contact support.</p>
+          </>
+        )}
         <Link href="/dashboard" className="text-xs text-blue-600 hover:underline">
           ← Back to queue
         </Link>
@@ -400,6 +408,15 @@ export default function CaseDetailPage({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
+      {/* Demo data banner — persistent, not dismissible */}
+      {isDemoAllowed && (
+        <div className="shrink-0 bg-red-900 px-6 py-2.5 border-b border-red-800">
+          <p className="text-sm font-semibold text-white">
+            ⚠ DEMO DATA — NOT REAL PIPELINE OUTPUT. API unreachable or demo mode enabled.
+          </p>
+        </div>
+      )}
+
       {/* Evidence popover modal */}
       {activeEvidenceRef && (
         <EvidenceModal

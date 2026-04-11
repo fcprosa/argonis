@@ -1,0 +1,26 @@
+{
+  "alert_id": "GOLDEN-PARTIAL-001",
+  "alert_type": "structuring",
+  "generated_at": "2026-04-05T10:00:00Z",
+  "account_number": "6601-2200-9971",
+  "account_holder": "TESTCASE_Heron Logistics Ltd",
+  "jurisdiction": "US",
+  "transactions": [
+    { "date": "2026-03-28", "amount": 9400, "currency": "USD", "type": "cash_deposit", "branch": "Downtown" },
+    { "date": "2026-03-28", "amount": 9600, "currency": "USD", "type": "cash_deposit", "branch": "Midtown" },
+    { "date": "2026-03-29", "amount": 9250, "currency": "USD", "type": "cash_deposit", "branch": "Downtown" },
+    { "date": "2026-03-29", "amount": 9750, "currency": "USD", "type": "cash_deposit", "branch": "Uptown" },
+    { "date": "2026-03-30", "amount": 9500, "currency": "USD", "type": "cash_deposit", "branch": "Midtown" },
+    { "date": "2026-03-30", "amount": 9350, "currency": "USD", "type": "cash_deposit", "branch": "Uptown" }
+  ],
+  "counterparties": "Multiple cash deposits across three branches. No identifiable counterparty.",
+  "account_age_days": 45,
+  "prior_sar_count": 0,
+  "beneficial_owner": "TESTCASE_Patricia M. Dalton (DOB: 1979-08-22, nationality: US)",
+  "business_type": "Freight logistics",
+  "expected_monthly_activity": "Wire payments from shipping clients, max USD 60,000/month",
+  "actual_activity_30d": "USD 56,850 in cash deposits across 3 branches over 3 days. No shipping-related wire activity.",
+  "screening_hits": "None",
+  "sanctions_hits": "None",
+  "pep_hits": "None"
+}

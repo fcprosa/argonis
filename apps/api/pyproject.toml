@@ -14,6 +14,7 @@ dependencies = [
     "httpx>=0.28.0",
     "PyJWT>=2.9.0",
     "reportlab>=4.2.0",
+    "slowapi>=0.1.9",
 ]
 
 [project.optional-dependencies]

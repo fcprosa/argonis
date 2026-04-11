@@ -1,0 +1,26 @@
+{
+  "alert_id": "GOLDEN-TBML-001",
+  "alert_type": "trade_based_ml",
+  "generated_at": "2026-04-02T10:00:00Z",
+  "account_number": "6100-8823-4471",
+  "account_holder": "TESTCASE_Zenith Global Imports Inc",
+  "jurisdiction": "US",
+  "transactions": [
+    { "date": "2026-03-10", "amount": 50000, "currency": "USD", "type": "credit", "counterparty": "Harmonia Textiles (Dubai)" },
+    { "date": "2026-03-11", "amount": 48000, "currency": "USD", "type": "wire_transfer", "counterparty": "Unknown — Tehran intermediary" },
+    { "date": "2026-03-13", "amount": 75000, "currency": "USD", "type": "credit", "counterparty": "Everfield Trading GmbH (Hamburg)" },
+    { "date": "2026-03-14", "amount": 73000, "currency": "USD", "type": "wire_transfer", "counterparty": "Unknown — shell entity in Erbil" },
+    { "date": "2026-03-16", "amount": 100000, "currency": "USD", "type": "credit", "counterparty": "Pacifica Supply Chain Ltd (HK)" },
+    { "date": "2026-03-17", "amount": 98000, "currency": "USD", "type": "wire_transfer", "counterparty": "Unknown — Dubai free zone entity" }
+  ],
+  "counterparties": "Inbound from three ostensibly legitimate trading companies. Outbound to unknown shell entities with no verifiable registration. Round-dollar amounts with near-identical in/out pairs suggest back-to-back layering.",
+  "account_age_days": 210,
+  "prior_sar_count": 0,
+  "beneficial_owner": "TESTCASE_Reza Karimi (DOB: 1978-11-02, nationality: IR)",
+  "business_type": "Textile and garment importer",
+  "expected_monthly_activity": "Trade payments to overseas suppliers, max USD 200,000/month",
+  "actual_activity_30d": "USD 444,000 in 6 transactions over 8 days. Three inbound credits immediately followed by near-identical outbound wires. Invoices on file do not match historical import volumes.",
+  "screening_hits": "None",
+  "sanctions_hits": "None",
+  "pep_hits": "None"
+}

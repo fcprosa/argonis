@@ -254,6 +254,9 @@ def build_narrative_pdf(
     case: dict[str, Any],
     screening: list[dict[str, Any]],
     audit_entries: list[dict[str, Any]],
+    *,
+    is_partial_screening: bool = False,
+    screening_gaps: list[str] | None = None,
 ) -> bytes:
     buf = io.BytesIO()
     S = _styles()
@@ -332,6 +335,45 @@ def build_narrative_pdf(
         ("RIGHTPADDING", (0, 0), (-1, -1), 6),
     ]))
     story.append(info_table)
+
+    # ── Screening coverage notice (if partial) ───────────────────────────
+    if is_partial_screening:
+        notice_style = ParagraphStyle(
+            "screening_notice",
+            parent=S["body"],
+            fontName="Helvetica-Bold",
+            fontSize=9,
+            textColor=colors.white,
+            leading=14,
+            spaceBefore=6,
+            spaceAfter=0,
+        )
+        gaps_text = ", ".join(screening_gaps) if screening_gaps else "Unknown sources"
+
+        notice_data = [[
+            Paragraph(
+                "SCREENING COVERAGE NOTICE: This investigation was conducted with "
+                "incomplete screening coverage. See 'Screening Coverage Limitations' "
+                "section for details. Manual supplementation required before "
+                f"regulatory filing.<br/><br/>Unavailable sources: {gaps_text}",
+                notice_style,
+            ),
+        ]]
+        notice_table = Table(
+            notice_data,
+            colWidths=[PAGE_W - 2 * MARGIN],
+            hAlign="LEFT",
+        )
+        notice_table.setStyle(TableStyle([
+            ("BACKGROUND",    (0, 0), (-1, -1), C_AMBER),
+            ("BOX",           (0, 0), (-1, -1), 1, C_AMBER),
+            ("TOPPADDING",    (0, 0), (-1, -1), 10),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 10),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 10),
+        ]))
+        story.append(Spacer(1, 10))
+        story.append(notice_table)
 
     # ── Narrative sections ─────────────────────────────────────────────────
     story.append(Spacer(1, 10))

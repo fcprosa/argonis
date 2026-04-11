@@ -167,10 +167,10 @@ export const SAMPLE_CASE_DETAIL: Record<string, CaseDetail> = {
         narrative_sections: [
           {
             id: "sec-001",
-            section_key: "executive_summary",
-            title: "Executive Summary",
+            section_key: "subject_information",
+            title: "Subject Information",
             content:
-              "Between 15 March and 28 March 2026, Ahmad Al-Rashid [EVID-001] conducted seven cash deposits totalling USD 68,450 across three branch locations. Each individual deposit fell below the USD 10,000 CTR threshold, ranging from USD 8,200 to USD 9,800 [EVID-002]. The deposits exhibit a statistically improbable clustering in the USD 9,000–9,900 band (confidence: 0.87), consistent with deliberate structuring to avoid Currency Transaction Report filing requirements under 31 U.S.C. § 5324 [EVID-003].",
+              "Ahmad Al-Rashid (DOB: 14 March 1978, nationality: Iraqi) holds a personal checking account (****4821) opened 12 January 2024 [EVID-001]. KYC documentation lists occupation as 'import consultant' with declared annual income of USD 45,000. Account activity over the preceding 90 days prior to this alert shows an average monthly cash deposit of USD 3,200 — the March 2026 deposits represent a 615% deviation from established baseline [EVID-004].",
             order_index: 0,
             approval_status: "approved",
             approved_by: "reviewer@demo.com",
@@ -178,10 +178,10 @@ export const SAMPLE_CASE_DETAIL: Record<string, CaseDetail> = {
           },
           {
             id: "sec-002",
-            section_key: "subject_profile",
-            title: "Subject Profile",
+            section_key: "suspicious_activity_summary",
+            title: "Suspicious Activity Summary",
             content:
-              "Ahmad Al-Rashid (DOB: 14 March 1978, nationality: Iraqi) holds a personal checking account (****4821) opened 12 January 2024 [EVID-004]. KYC documentation lists occupation as 'import consultant' with declared annual income of USD 45,000. Account activity over the preceding 90 days prior to this alert shows an average monthly cash deposit of USD 3,200 — the March 2026 deposits represent a 615% deviation from established baseline [EVID-005].",
+              "Between 15 March and 28 March 2026, Ahmad Al-Rashid [EVID-001] conducted seven cash deposits totalling USD 68,450 across three branch locations. Each individual deposit fell below the USD 10,000 CTR threshold, ranging from USD 8,200 to USD 9,800 [EVID-002]. The deposits exhibit a statistically improbable clustering in the USD 9,000–9,900 band (confidence: 0.87), consistent with deliberate structuring to avoid Currency Transaction Report filing requirements under 31 U.S.C. § 5324 [EVID-003].",
             order_index: 1,
             approval_status: "pending",
             approved_by: null,
@@ -189,8 +189,8 @@ export const SAMPLE_CASE_DETAIL: Record<string, CaseDetail> = {
           },
           {
             id: "sec-003",
-            section_key: "transaction_analysis",
-            title: "Transaction Analysis",
+            section_key: "detailed_narrative",
+            title: "Detailed Narrative",
             content:
               "Structuring pattern confirmed across seven transactions [EVID-002]. Velocity anomaly detected: 7 deposits in 13 days versus historical baseline of 1.2 deposits per month [EVID-005]. Geographic dispersion across 3 branches (Downtown, Midtown, Airport) suggests deliberate avoidance of teller familiarity [EVID-006]. INSUFFICIENT EVIDENCE to confirm beneficial ownership of Al-Rashid Trading LLC — further KYC refresh required before this entity can be included in the SAR filing.",
             order_index: 2,
@@ -200,8 +200,8 @@ export const SAMPLE_CASE_DETAIL: Record<string, CaseDetail> = {
           },
           {
             id: "sec-004",
-            section_key: "recommendation",
-            title: "Recommendation",
+            section_key: "supporting_evidence",
+            title: "Supporting Evidence",
             content:
               "File Suspicious Activity Report with FinCEN under 31 CFR 1020.320. Recommended SAR narrative characterisation: 'structuring to evade CTR reporting'. Freeze discretionary account access pending BSA officer review. INSUFFICIENT EVIDENCE to recommend account closure at this stage — no confirmed funds destination identified.",
             order_index: 3,
@@ -377,10 +377,10 @@ export const SAMPLE_CASE_DETAIL: Record<string, CaseDetail> = {
         narrative_sections: [
           {
             id: "sec-002-01",
-            section_key: "executive_summary",
-            title: "Executive Summary",
+            section_key: "subject_information",
+            title: "Subject Information",
             content:
-              "Between 15 February and 31 March 2026, Global Trade Corp Ltd (GTC) [EVID-001] executed twelve wire transfers totalling USD 4,200,000 across correspondent banks in the UAE, Singapore, Hong Kong, and the United Kingdom [EVID-002]. The transfers exhibit a layering pattern consistent with trade-based money laundering: each leg involved a different counterparty bank and nominal trade justification, yet underlying invoices could not be independently verified [EVID-003]. An adverse media flag links GTC to a 2024 Singapore MAS enforcement action concerning undisclosed beneficial ownership [EVID-004]. Overall risk score: 0.61 (HIGH). Recommended action: Enhanced Due Diligence with 60-day monitoring.",
+              "Global Trade Corp Ltd is a UK-registered trading company (Companies House no. 09847321) incorporated in 2019 [EVID-001]. The company lists two directors: Chen Wei-Lin (Singaporean national) and a nominee director service. Ultimate beneficial ownership (UBO) has not been confirmed — submitted UBO documentation references a Cayman Islands holding vehicle for which no registry records are publicly available [EVID-005]. GTC holds a sterling current account (****7703) opened 14 June 2022. Prior 12 months showed average monthly turnover of GBP 180,000; the disputed period represents a 1,033% deviation from baseline [EVID-002].",
             order_index: 0,
             approval_status: "approved",
             approved_by: "reviewer@demo.com",
@@ -388,10 +388,10 @@ export const SAMPLE_CASE_DETAIL: Record<string, CaseDetail> = {
           },
           {
             id: "sec-002-02",
-            section_key: "subject_profile",
-            title: "Subject Profile",
+            section_key: "suspicious_activity_summary",
+            title: "Suspicious Activity Summary",
             content:
-              "Global Trade Corp Ltd is a UK-registered trading company (Companies House no. 09847321) incorporated in 2019 [EVID-001]. The company lists two directors: Chen Wei-Lin (Singaporean national) and a nominee director service. Ultimate beneficial ownership (UBO) has not been confirmed — submitted UBO documentation references a Cayman Islands holding vehicle for which no registry records are publicly available [EVID-005]. GTC holds a sterling current account (****7703) opened 14 June 2022. Prior 12 months showed average monthly turnover of GBP 180,000; the disputed period represents a 1,033% deviation from baseline [EVID-002].",
+              "Between 15 February and 31 March 2026, Global Trade Corp Ltd (GTC) [EVID-001] executed twelve wire transfers totalling USD 4,200,000 across correspondent banks in the UAE, Singapore, Hong Kong, and the United Kingdom [EVID-002]. The transfers exhibit a layering pattern consistent with trade-based money laundering: each leg involved a different counterparty bank and nominal trade justification, yet underlying invoices could not be independently verified [EVID-003]. An adverse media flag links GTC to a 2024 Singapore MAS enforcement action concerning undisclosed beneficial ownership [EVID-004]. Overall risk score: 0.61 (HIGH). Recommended action: Enhanced Due Diligence with 60-day monitoring.",
             order_index: 1,
             approval_status: "pending",
             approved_by: null,
@@ -399,8 +399,8 @@ export const SAMPLE_CASE_DETAIL: Record<string, CaseDetail> = {
           },
           {
             id: "sec-002-03",
-            section_key: "transaction_analysis",
-            title: "Transaction Analysis",
+            section_key: "detailed_narrative",
+            title: "Detailed Narrative",
             content:
               "Twelve outbound wires between 15 Feb and 31 Mar 2026 [EVID-002]. Round-trip pattern confirmed: USD 1.4M originated from a UAE free-zone entity (GTC Holdings FZE), transited via Singapore and Hong Kong shell accounts, and re-entered the UK account within 14 days under trade description 'commodity settlement' [EVID-003]. Invoice amounts do not correspond to prevailing commodity prices for the stated goods (aluminium ingots) by a margin of 340%. Jurisdiction-hopping across four FATF-monitored territories without evident commercial rationale. INSUFFICIENT EVIDENCE to confirm the identity of the Singapore transit account beneficial owners — subpoena or MLA request required.",
             order_index: 2,
@@ -410,8 +410,8 @@ export const SAMPLE_CASE_DETAIL: Record<string, CaseDetail> = {
           },
           {
             id: "sec-002-04",
-            section_key: "recommendation",
-            title: "Recommendation",
+            section_key: "supporting_evidence",
+            title: "Supporting Evidence",
             content:
               "Apply Enhanced Due Diligence (EDD) measures under JMLSG Guidance Part I, Chapter 5. Require certified UBO documentation within 21 days; suspend international wire facilities pending receipt. Initiate 60-day transaction monitoring uplift. File Defence Against Money Laundering (DAML) consent request with the National Crime Agency (NCA) before processing further international transfers. INSUFFICIENT EVIDENCE to recommend SAR filing at this stage — adverse media hit is investigative, not confirmatory; EDD outcome should determine whether a SAR is warranted.",
             order_index: 3,
@@ -614,10 +614,10 @@ export const SAMPLE_CASE_DETAIL: Record<string, CaseDetail> = {
         narrative_sections: [
           {
             id: "sec-003-01",
-            section_key: "executive_summary",
-            title: "Executive Summary",
+            section_key: "subject_information",
+            title: "Subject Information",
             content:
-              "On 3 April 2026, an automated name-screening alert flagged Viktor Petrov (DOB: 3 September 1971, Russian national) [EVID-001] as a potential match against the OFAC Specially Designated Nationals (SDN) List under Executive Order 14024 (Russia-related sanctions). Screening analysis returned a 96% confidence match [EVID-002]. The subject holds a USD current account (****2291) that was dormant for 142 days before eight inbound transfers totalling USD 890,000 were received between 1 and 30 March 2026 [EVID-003]. The combination of confirmed OFAC SDN match, sudden dormant-account reactivation, and high-velocity inflows constitutes a critical risk event requiring immediate regulatory action.",
+              "Viktor Alekseyevich Petrov (DOB: 3 Sep 1971, Yekaterinburg, Russia) [EVID-001] holds account ****2291 opened 4 November 2021 under Russian passport ****4417. KYC documentation lists occupation as 'energy consultant' with declared annual income of USD 120,000. The account recorded no activity between 14 September 2025 and 4 March 2026 (142-day dormancy period) [EVID-003]. No PEP designation was flagged at onboarding; however, the OFAC SDN listing post-dates account opening and was not captured in the initial screening cycle [EVID-002].",
             order_index: 0,
             approval_status: "approved",
             approved_by: "reviewer@demo.com",
@@ -625,10 +625,10 @@ export const SAMPLE_CASE_DETAIL: Record<string, CaseDetail> = {
           },
           {
             id: "sec-003-02",
-            section_key: "subject_profile",
-            title: "Subject Profile",
+            section_key: "suspicious_activity_summary",
+            title: "Suspicious Activity Summary",
             content:
-              "Viktor Alekseyevich Petrov (DOB: 3 Sep 1971, Yekaterinburg, Russia) [EVID-001] holds account ****2291 opened 4 November 2021 under Russian passport ****4417. KYC documentation lists occupation as 'energy consultant' with declared annual income of USD 120,000. The account recorded no activity between 14 September 2025 and 4 March 2026 (142-day dormancy period) [EVID-003]. No PEP designation was flagged at onboarding; however, the OFAC SDN listing post-dates account opening and was not captured in the initial screening cycle [EVID-002].",
+              "On 3 April 2026, an automated name-screening alert flagged Viktor Petrov (DOB: 3 September 1971, Russian national) [EVID-001] as a potential match against the OFAC Specially Designated Nationals (SDN) List under Executive Order 14024 (Russia-related sanctions). Screening analysis returned a 96% confidence match [EVID-002]. The subject holds a USD current account (****2291) that was dormant for 142 days before eight inbound transfers totalling USD 890,000 were received between 1 and 30 March 2026 [EVID-003]. The combination of confirmed OFAC SDN match, sudden dormant-account reactivation, and high-velocity inflows constitutes a critical risk event requiring immediate regulatory action.",
             order_index: 1,
             approval_status: "approved",
             approved_by: "reviewer@demo.com",
@@ -636,8 +636,8 @@ export const SAMPLE_CASE_DETAIL: Record<string, CaseDetail> = {
           },
           {
             id: "sec-003-03",
-            section_key: "transaction_analysis",
-            title: "Transaction Analysis",
+            section_key: "detailed_narrative",
+            title: "Detailed Narrative",
             content:
               "Eight inbound wire transfers received 1–30 March 2026 [EVID-003]: USD 95,000 / 120,000 / 85,000 / 200,000 / 110,000 / 75,000 / 105,000 / 100,000. All originate from a single counterparty SWIFT code (ROSB RU MM — Rosbank Moscow), a sanctioned correspondent institution under OFAC RUSSIA-EO14024 [EVID-004]. Velocity anomaly: 8 transactions in 30 days versus zero transactions in preceding 142 days. No outbound activity observed — funds remain on deposit. INSUFFICIENT EVIDENCE to determine the ultimate beneficial source of funds beyond the Rosbank counterparty at this stage.",
             order_index: 2,
@@ -647,8 +647,8 @@ export const SAMPLE_CASE_DETAIL: Record<string, CaseDetail> = {
           },
           {
             id: "sec-003-04",
-            section_key: "recommendation",
-            title: "Recommendation",
+            section_key: "supporting_evidence",
+            title: "Supporting Evidence",
             content:
               "Immediate actions required: (1) Freeze account ****2291 under OFAC blocking obligations — funds received from a sanctioned counterparty must be blocked and reported within 10 business days per 31 CFR § 501.603. (2) File Suspicious Activity Report with FinCEN citing OFAC SDN match + sanctions-linked wire transfers. (3) File OFAC blocking report via OFAC's e-licensing system. (4) Escalate to BSA/OFAC Compliance Officer for board-level notification. (5) Do NOT notify the customer — tipping-off prohibition applies under 31 U.S.C. § 5318(g)(2).",
             order_index: 3,

@@ -37,6 +37,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# golden-set narrative output (human review only, never committed)
+apps/api/tests/golden/latest_run/*.md
+
 # supabase
 supabase/.branches
 supabase/.temp

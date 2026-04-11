@@ -1,0 +1,26 @@
+{
+  "alert_id": "GOLDEN-GEO-001",
+  "alert_type": "geographic_risk",
+  "generated_at": "2026-04-05T11:15:00Z",
+  "account_number": "8844-2219-5530",
+  "account_holder": "TESTCASE_Golden Lotus Trading Co",
+  "jurisdiction": "US",
+  "transactions": [
+    { "date": "2026-03-01", "amount": 25000, "currency": "USD", "type": "wire_transfer", "counterparty": "TESTCASE_Jade Crown Gems (Yangon)" },
+    { "date": "2026-03-04", "amount": 30000, "currency": "USD", "type": "wire_transfer", "counterparty": "TESTCASE_Mandalay Timber Exports" },
+    { "date": "2026-03-07", "amount": 35000, "currency": "USD", "type": "wire_transfer", "counterparty": "TESTCASE_Ayeyarwady Freight Corp" },
+    { "date": "2026-03-10", "amount": 25000, "currency": "USD", "type": "wire_transfer", "counterparty": "TESTCASE_Jade Crown Gems (Yangon)" },
+    { "date": "2026-03-13", "amount": 30000, "currency": "USD", "type": "wire_transfer", "counterparty": "TESTCASE_Mandalay Timber Exports" },
+    { "date": "2026-03-15", "amount": 35000, "currency": "USD", "type": "wire_transfer", "counterparty": "TESTCASE_Shwe Nagar International" }
+  ],
+  "counterparties": "Four Myanmar-based entities: TESTCASE_Jade Crown Gems, TESTCASE_Mandalay Timber Exports, TESTCASE_Ayeyarwady Freight Corp, and TESTCASE_Shwe Nagar International. All located in FATF high-risk jurisdiction.",
+  "account_age_days": 400,
+  "prior_sar_count": 0,
+  "beneficial_owner": "TESTCASE_Kyaw Min Tun (DOB: 1980-05-19, nationality: MM)",
+  "business_type": "Gemstone and hardwood importer",
+  "expected_monthly_activity": "International trade payments to suppliers in Southeast Asia, max USD 500,000/month",
+  "actual_activity_30d": "USD 180,000 in 6 outbound wire transfers over 15 days. All payments directed to entities domiciled in Myanmar, a FATF high-risk jurisdiction.",
+  "screening_hits": "None",
+  "sanctions_hits": "None",
+  "pep_hits": "None"
+}

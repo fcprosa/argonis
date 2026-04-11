@@ -6,15 +6,20 @@ Endpoints:
   POST /screening/batch           — Batch screen multiple names
   POST /screening/adverse-media   — Search adverse media for a name
   POST /screening/ofac/refresh    — Refresh OFAC SDN data (cron endpoint)
-  GET  /screening/ofac/status     — OFAC SDN metadata (last refresh, counts)
+  GET  /screening/ofac/status     — OFAC SDN staleness + counts (JWT required)
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+import logging
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.auth import AuthContext, get_current_user
 from app.config import settings
+from app.db import get_service_db
 from app.screening import (
     AdverseMediaResponse,
     ScreeningResponse,
@@ -22,7 +27,16 @@ from app.screening import (
     screen,
 )
 from app.screening.adverse_media import search_adverse_media
-from app.screening.ofac import get_sdn_meta, refresh_sdn
+from app.screening.ofac import (
+    ALT_CSV_URL,
+    SDN_CSV_URL,
+    download_sdn_csv,
+    load_sdn_to_db,
+    parse_alt_csv,
+    parse_sdn_csv,
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/screening", tags=["screening"])
 
@@ -60,6 +74,17 @@ class AdverseMediaRequest(BaseModel):
 class RefreshResponse(BaseModel):
     status: str
     message: str
+    entries_count: int = 0
+    alternates_count: int = 0
+
+
+class OfacStatusResponse(BaseModel):
+    entries_count: int
+    alternates_count: int
+    last_refreshed_at: str | None
+    staleness_hours: float | None
+    is_stale: bool
+    is_empty: bool
 
 
 # ---------------------------------------------------------------------------
@@ -138,45 +163,173 @@ async def search_media(req: AdverseMediaRequest) -> AdverseMediaResponse:
     )
 
 
+# ---------------------------------------------------------------------------
+# OFAC SDN refresh — synchronous, transactional, audited
+# ---------------------------------------------------------------------------
+
+
 @router.post("/ofac/refresh", response_model=RefreshResponse)
-async def refresh_ofac_sdn(background_tasks: BackgroundTasks) -> RefreshResponse:
+async def refresh_ofac_sdn(
+    auth: AuthContext = Depends(get_current_user),
+) -> RefreshResponse:
     """
-    Trigger OFAC SDN data refresh.
+    Refresh OFAC SDN data.
 
-    Downloads the latest SDN + ALT CSV files from Treasury.gov and
-    reloads into Supabase. Call weekly via cron.
+    Downloads the SDN + ALT CSV files from Treasury.gov, parses them fully,
+    then upserts into Supabase. The download + parse step happens BEFORE any
+    DB writes — if the download fails, existing data is preserved.
 
-    This runs as a background task — returns immediately.
-    """
-    if not settings.supabase_url or not settings.supabase_service_key:
-        raise HTTPException(
-            status_code=503,
-            detail="Supabase not configured",
-        )
-
-    background_tasks.add_task(
-        refresh_sdn,
-        supabase_url=settings.supabase_url,
-        supabase_key=settings.supabase_service_key,
-    )
-
-    return RefreshResponse(
-        status="accepted",
-        message="OFAC SDN refresh started in background. Check /screening/ofac/status for progress.",
-    )
-
-
-@router.get("/ofac/status")
-async def ofac_status() -> dict:
-    """
-    Get OFAC SDN metadata: last refresh timestamp, entry counts.
-
-    Use this to verify the SDN data is loaded and fresh.
+    Logs a row in ofac_refresh_log for audit trail.
     """
     if not settings.supabase_url or not settings.supabase_service_key:
         raise HTTPException(status_code=503, detail="Supabase not configured")
 
-    return await get_sdn_meta(
-        supabase_url=settings.supabase_url,
-        supabase_key=settings.supabase_service_key,
+    # ── Phase 1: download + parse (no DB writes yet) ──────────────────
+    try:
+        logger.info(
+            "ofac_refresh: downloading SDN CSV from %s (triggered_by=%s)",
+            SDN_CSV_URL,
+            auth.user_id,
+        )
+        sdn_raw = await download_sdn_csv(SDN_CSV_URL)
+        alt_raw = await download_sdn_csv(ALT_CSV_URL)
+    except Exception as exc:
+        logger.error("ofac_refresh: download failed: %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to download OFAC SDN data from Treasury: {exc}",
+        )
+
+    try:
+        sdn_entries = parse_sdn_csv(sdn_raw)
+        alt_entries = parse_alt_csv(alt_raw)
+    except Exception as exc:
+        logger.error("ofac_refresh: CSV parse failed: %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to parse OFAC SDN CSV: {exc}",
+        )
+
+    if len(sdn_entries) == 0:
+        raise HTTPException(
+            status_code=502,
+            detail="OFAC SDN CSV parsed but contained zero entries — aborting to protect existing data",
+        )
+
+    logger.info(
+        "ofac_refresh: parsed %d SDN entries, %d alternates — proceeding to DB load",
+        len(sdn_entries),
+        len(alt_entries),
+    )
+
+    # ── Phase 2: upsert into DB ──────────────────────────────────────
+    try:
+        counts = await load_sdn_to_db(
+            settings.supabase_url,
+            settings.supabase_service_key,
+            sdn_entries,
+            alt_entries,
+        )
+    except Exception as exc:
+        logger.error("ofac_refresh: DB load failed: %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to load OFAC SDN data into database: {exc}",
+        )
+
+    entries_loaded = counts.get("entries", 0)
+    alts_loaded = counts.get("alternates", 0)
+    logger.info(
+        "ofac_refresh: loaded %d entries, %d alternates into DB",
+        entries_loaded,
+        alts_loaded,
+    )
+
+    # ── Phase 3: audit log ───────────────────────────────────────────
+    try:
+        db = await get_service_db()
+        await db.table("ofac_refresh_log").insert(
+            {
+                "entries_count": entries_loaded,
+                "alternates_count": alts_loaded,
+                "source_url": SDN_CSV_URL,
+                "triggered_by": auth.user_id,
+            }
+        ).execute()
+    except Exception as exc:
+        logger.warning("ofac_refresh: failed to write audit log: %s", exc)
+
+    return RefreshResponse(
+        status="completed",
+        message=f"OFAC SDN refresh complete: {entries_loaded} entries, {alts_loaded} alternates loaded.",
+        entries_count=entries_loaded,
+        alternates_count=alts_loaded,
+    )
+
+
+# ---------------------------------------------------------------------------
+# OFAC SDN status — staleness + health reporting
+# ---------------------------------------------------------------------------
+
+STALENESS_THRESHOLD_HOURS = 168.0  # 7 days
+
+
+@router.get("/ofac/status", response_model=OfacStatusResponse)
+async def ofac_status(
+    auth: AuthContext = Depends(get_current_user),
+) -> OfacStatusResponse:
+    """
+    OFAC SDN health check: row counts, last refresh timestamp, staleness.
+
+    is_stale is true when data hasn't been refreshed in 7+ days.
+    is_empty is true when the entries table has zero rows (critical).
+    """
+    if not settings.supabase_url or not settings.supabase_service_key:
+        raise HTTPException(status_code=503, detail="Supabase not configured")
+
+    db = await get_service_db()
+
+    entries_result = await (
+        db.table("ofac_sdn_entries")
+        .select("id", count="exact")
+        .limit(0)
+        .execute()
+    )
+    entries_count = entries_result.count or 0
+
+    alts_result = await (
+        db.table("ofac_sdn_alternates")
+        .select("id", count="exact")
+        .limit(0)
+        .execute()
+    )
+    alternates_count = alts_result.count or 0
+
+    # Get last refresh from the refresh log (most recent)
+    last_refresh_result = await (
+        db.table("ofac_refresh_log")
+        .select("refreshed_at")
+        .order("refreshed_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+
+    last_refreshed_at: str | None = None
+    staleness_hours: float | None = None
+    is_stale = True  # Default to stale if no refresh data
+
+    if last_refresh_result.data:
+        last_refreshed_at = last_refresh_result.data[0]["refreshed_at"]
+        refreshed_dt = datetime.fromisoformat(last_refreshed_at.replace("Z", "+00:00"))
+        now = datetime.now(timezone.utc)
+        staleness_hours = (now - refreshed_dt).total_seconds() / 3600.0
+        is_stale = staleness_hours > STALENESS_THRESHOLD_HOURS
+
+    return OfacStatusResponse(
+        entries_count=entries_count,
+        alternates_count=alternates_count,
+        last_refreshed_at=last_refreshed_at,
+        staleness_hours=round(staleness_hours, 2) if staleness_hours is not None else None,
+        is_stale=is_stale,
+        is_empty=entries_count == 0,
     )

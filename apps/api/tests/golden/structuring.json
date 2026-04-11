@@ -1,0 +1,32 @@
+{
+  "alert_id": "GOLDEN-STRUCT-001",
+  "alert_type": "structuring",
+  "generated_at": "2026-04-01T14:30:00Z",
+  "account_number": "7821-4490-3356",
+  "account_holder": "TESTCASE_Ridgeline Consulting LLC",
+  "jurisdiction": "US",
+  "transactions": [
+    { "date": "2026-03-25", "amount": 9450, "currency": "USD", "type": "cash_deposit", "branch": "Manhattan East" },
+    { "date": "2026-03-25", "amount": 9700, "currency": "USD", "type": "cash_deposit", "branch": "Manhattan West" },
+    { "date": "2026-03-26", "amount": 9200, "currency": "USD", "type": "cash_deposit", "branch": "Brooklyn Heights" },
+    { "date": "2026-03-26", "amount": 9800, "currency": "USD", "type": "cash_deposit", "branch": "Midtown" },
+    { "date": "2026-03-27", "amount": 9350, "currency": "USD", "type": "cash_deposit", "branch": "Manhattan East" },
+    { "date": "2026-03-27", "amount": 9600, "currency": "USD", "type": "cash_deposit", "branch": "Flushing" },
+    { "date": "2026-03-28", "amount": 9750, "currency": "USD", "type": "cash_deposit", "branch": "Manhattan West" },
+    { "date": "2026-03-28", "amount": 9500, "currency": "USD", "type": "cash_deposit", "branch": "Brooklyn Heights" },
+    { "date": "2026-03-29", "amount": 9300, "currency": "USD", "type": "cash_deposit", "branch": "Midtown" },
+    { "date": "2026-03-29", "amount": 9650, "currency": "USD", "type": "cash_deposit", "branch": "Flushing" },
+    { "date": "2026-03-30", "amount": 9550, "currency": "USD", "type": "cash_deposit", "branch": "Manhattan East" },
+    { "date": "2026-03-30", "amount": 9400, "currency": "USD", "type": "cash_deposit", "branch": "Manhattan West" }
+  ],
+  "counterparties": "Multiple cash deposits across six branches. No identifiable counterparty on any transaction.",
+  "account_age_days": 62,
+  "prior_sar_count": 0,
+  "beneficial_owner": "TESTCASE_Thomas J. Mercer (DOB: 1985-03-14, nationality: US)",
+  "business_type": "Management consulting firm",
+  "expected_monthly_activity": "Wire payments from corporate clients, max USD 80,000/month",
+  "actual_activity_30d": "USD 114,250 in cash deposits across 6 branches over 6 consecutive days. No outgoing wire activity. No client invoices on file.",
+  "screening_hits": "None",
+  "sanctions_hits": "None",
+  "pep_hits": "None"
+}

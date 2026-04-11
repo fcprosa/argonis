@@ -28,7 +28,8 @@ from typing import Any
 
 import anthropic
 
-from app.pipeline.models import EvidencePipelineResult
+from app.pipeline.errors import OfacDataUnavailableError
+from app.pipeline.models import EvidencePipelineResult, StepError
 from app.pipeline.step1_parse import parse_alert
 from app.pipeline.step2_gather import gather_data
 from app.pipeline.step3_screen import screen_entities
@@ -85,19 +86,39 @@ class EvidencePipeline:
 
         # ── Step 3: SCREEN ───────────────────────────────────────────────────
         logger.info("▶ step=3/5 screen")
-        screening = await screen_entities(
-            parsed,
-            opensanctions_api_key=self._opensanctions_api_key,
-            serper_api_key=self._serper_api_key,
-            anthropic_api_key=self._client.api_key,
-            supabase_url=self._supabase_url,
-            supabase_key=self._supabase_key,
-        )
+        try:
+            screening = await screen_entities(
+                parsed,
+                opensanctions_api_key=self._opensanctions_api_key,
+                serper_api_key=self._serper_api_key,
+                anthropic_api_key=self._client.api_key,
+                supabase_url=self._supabase_url,
+                supabase_key=self._supabase_key,
+            )
+        except OfacDataUnavailableError as exc:
+            error_msg = (
+                "OFAC SDN data unavailable. Run POST /screening/ofac/refresh "
+                "before retrying."
+            )
+            logger.critical("✗ step=screen HALTED: %s", exc)
+            return EvidencePipelineResult(
+                parsed_alert=parsed,
+                gathered_data=gathered,
+                step_errors=[StepError(step_name="screen", error_message=error_msg)],
+                halted=True,
+            )
+
+        if screening.is_partial:
+            logger.warning(
+                "  ⚠ step=screen PARTIAL — coverage_gaps=%s",
+                screening.coverage_gaps,
+            )
         logger.info(
-            "  ✓ step=screen entities=%d hits=%d sources=%s",
+            "  ✓ step=screen entities=%d hits=%d sources=%s is_partial=%s",
             len(screening.entity_names),
             len(screening.hits),
             screening.sources_queried,
+            screening.is_partial,
         )
 
         # ── Step 4: ANALYZE ──────────────────────────────────────────────────
@@ -126,7 +147,17 @@ class EvidencePipeline:
 
         # ── Step 5: NARRATE (LLM) ────────────────────────────────────────────
         logger.info("▶ step=5/5 narrate (LLM)")
-        narrative, llm_usage = await narrate(parsed, evidence_items, self._client)
+        narrative, llm_usage, firewall_results = await narrate(
+            parsed,
+            evidence_items,
+            self._client,
+            coverage_gaps=screening.coverage_gaps if screening.is_partial else None,
+            data_gaps=gathered.data_gaps if gathered.data_gaps else None,
+        )
+
+        if screening.is_partial:
+            narrative.is_partial_screening = True
+            narrative.screening_gaps = screening.coverage_gaps
 
         return EvidencePipelineResult(
             parsed_alert=parsed,
@@ -136,4 +167,5 @@ class EvidencePipeline:
             evidence_items=evidence_items,
             narrative=narrative,
             llm_usage=llm_usage,
+            firewall_results=firewall_results,
         )

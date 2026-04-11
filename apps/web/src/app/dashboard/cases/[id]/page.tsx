@@ -13,7 +13,7 @@ import {
   statusMeta,
   fmtDate,
 } from "@/lib/sample-data";
-import { NarrativeViewer } from "@/components/NarrativeViewer";
+import { NarrativeViewer, DemoDataBanner } from "@/components/NarrativeViewer";
 
 // Pipeline step definitions — display order + labels
 const PIPELINE_STEPS = [
@@ -41,6 +41,7 @@ export default function CaseDetailPage({
   const [loading, setLoading] = useState(true);
   const [demoMode, setDemoMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isDemoAllowed = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
   // Investigation state
   const [investigating, setInvestigating] = useState(false);
@@ -60,21 +61,22 @@ export default function CaseDetailPage({
       setDemoMode(false);
       return data;
     } catch (err) {
-      // Try sample data
-      const sample = SAMPLE_CASE_DETAIL[id];
-      if (sample) {
-        setDetail(sample);
-        setDemoMode(true);
-        return sample;
+      if (isDemoAllowed) {
+        const sample = SAMPLE_CASE_DETAIL[id];
+        if (sample) {
+          setDetail(sample);
+          setDemoMode(true);
+          return sample;
+        }
       }
       const msg =
         err instanceof ApiError
           ? `${err.httpStatus}: ${err.message}`
-          : "Failed to load case";
+          : "Unable to reach investigation API. Check your connection or contact support.";
       setError(msg);
       return null;
     }
-  }, [id]);
+  }, [id, isDemoAllowed]);
 
   useEffect(() => {
     setLoading(true);
@@ -245,6 +247,15 @@ export default function CaseDetailPage({
           </span>
         )}
       </header>
+
+      {/* Demo data banner — persistent, not dismissible */}
+      {demoMode && (
+        <div className="shrink-0 bg-red-900 px-6 py-2.5 border-b border-red-800">
+          <p className="text-sm font-semibold text-white">
+            ⚠ DEMO DATA — NOT REAL PIPELINE OUTPUT. API unreachable or demo mode enabled.
+          </p>
+        </div>
+      )}
 
       {/* Scrollable body */}
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">

@@ -97,10 +97,10 @@ async def _store_cache(
     matches: list[ScreeningMatch],
     supabase_url: str,
     supabase_key: str,
-    organization_id: str | None = None,
+    organization_id: str,
     case_id: str | None = None,
 ) -> None:
-    """Store screening results in the cache table."""
+    """Store screening results in the cache table. ``organization_id`` is required."""
     try:
         from supabase import acreate_client
     except ImportError:
@@ -110,6 +110,7 @@ async def _store_cache(
 
     for match in matches:
         row: dict[str, Any] = {
+            "organization_id": organization_id,
             "entity_name": match.entity_name_matched or entity_name,
             "screened_name": entity_name,
             "match_confidence": match.confidence,
@@ -118,8 +119,6 @@ async def _store_cache(
             "list_name": match.list_name,
             "status": "pending",
         }
-        if organization_id:
-            row["organization_id"] = organization_id
         if case_id:
             row["case_id"] = case_id
 
@@ -241,10 +240,16 @@ async def screen_opensanctions(
 
     # --- Cache results ---
     if supabase_url and supabase_key and matches:
-        await _store_cache(
-            name, matches, supabase_url, supabase_key,
-            organization_id=organization_id, case_id=case_id,
-        )
+        if not organization_id:
+            logger.debug(
+                "skipping OpenSanctions cache write — no organization_id",
+            )
+        else:
+            await _store_cache(
+                name, matches, supabase_url, supabase_key,
+                organization_id,
+                case_id=case_id,
+            )
 
     matches.sort(key=lambda m: m.confidence, reverse=True)
     return matches
@@ -363,10 +368,16 @@ async def batch_screen_opensanctions(
 
         # Cache results
         if supabase_url and supabase_key and matches:
-            await _store_cache(
-                name, matches, supabase_url, supabase_key,
-                organization_id=organization_id, case_id=case_id,
-            )
+            if not organization_id:
+                logger.debug(
+                    "skipping OpenSanctions cache write — no organization_id",
+                )
+            else:
+                await _store_cache(
+                    name, matches, supabase_url, supabase_key,
+                    organization_id,
+                    case_id=case_id,
+                )
 
     return all_results
 

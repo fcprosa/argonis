@@ -73,14 +73,23 @@ class KYCProfile(BaseModel):
     beneficial_owners: list[str] = Field(default_factory=list)
     kyc_tier: str = "standard"
     last_reviewed: date | None = None
-    source: str  # "db" | "stub"
+    source: str  # "kyc_profiles" | "stub" | "missing_kyc"
+    is_synthetic: bool = False
+    pep_status: str | None = None
+    risk_rating: str | None = None
+    occupation: str | None = None
+    source_of_funds: str | None = None
+    date_of_birth: date | None = None
+    nationality: str | None = None
+    country_of_residence: str | None = None
 
 
 class AccountRelationship(BaseModel):
-    account_number: str
+    source_customer_id: str
+    related_customer_id: str
     relationship_type: str
-    linked_account: str
-    source: str
+    confidence: float = Field(ge=0.0, le=1.0, default=1.0)
+    source: str  # "account_relationships" | "stub"
 
 
 class HistoricalAlert(BaseModel):
@@ -96,6 +105,8 @@ class GatheredData(BaseModel):
     account_relationships: list[AccountRelationship]
     historical_alerts: list[HistoricalAlert]
     source_metadata: dict[str, str]
+    data_gaps: list[str] = Field(default_factory=list)
+    relationships_available: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -113,11 +124,24 @@ class ScreeningHit(BaseModel):
     screened_at: datetime
 
 
+class SourceResult(BaseModel):
+    """Outcome of a single screening source (OFAC, OpenSanctions, adverse media)."""
+
+    source_name: str
+    status: Literal["success", "failed", "timeout", "rate_limited", "skipped"]
+    matches: list[ScreeningHit] = Field(default_factory=list)
+    error_message: str | None = None
+    duration_ms: int = 0
+
+
 class ScreeningBundle(BaseModel):
     entity_names: list[str]
     hits: list[ScreeningHit]
     sources_queried: list[str]
     screened_at: datetime
+    source_results: list[SourceResult] = Field(default_factory=list)
+    coverage_gaps: list[str] = Field(default_factory=list)
+    is_partial: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +213,17 @@ class NarrativeOutput(BaseModel):
     sar_grounds: str | None = None
     recommended_action: Literal["dismiss", "monitor", "investigate", "escalate", "file_sar"]
     evidence_ids_cited: list[str]
+    is_partial_screening: bool = False
+    screening_gaps: list[str] = Field(default_factory=list)
+
+
+class SectionFirewallResult(BaseModel):
+    """Per-section results from the evidence firewall pass."""
+
+    section_key: str
+    kept_ids: list[str]
+    stripped_ids: list[str]
+    strip_rate: float = Field(ge=0.0, le=1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -209,13 +244,21 @@ class LLMUsage(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class StepError(BaseModel):
+    step_name: str
+    error_message: str
+
+
 class EvidencePipelineResult(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     parsed_alert: ParsedAlert
     gathered_data: GatheredData
-    screening_bundle: ScreeningBundle
-    analysis_result: AnalysisResult
-    evidence_items: list[EvidenceItem]
-    narrative: NarrativeOutput
+    screening_bundle: ScreeningBundle | None = None
+    analysis_result: AnalysisResult | None = None
+    evidence_items: list[EvidenceItem] = Field(default_factory=list)
+    narrative: NarrativeOutput | None = None
     llm_usage: LLMUsage | None = None
+    firewall_results: list[SectionFirewallResult] = Field(default_factory=list)
+    step_errors: list[StepError] = Field(default_factory=list)
+    halted: bool = False

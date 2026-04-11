@@ -3,7 +3,10 @@ Investigation endpoint.
 
 POST /investigate — Run the full evidence-first investigation pipeline.
 
-RATE LIMIT: 5 requests per minute per user.
+RATE LIMITS (battle plan rule — "$500 in Claude credits in minutes"):
+  • 10 investigations / minute / user
+  • 100 investigations / hour / user
+  • 500 investigations / day / organization
 
 ANTI-ERROR: An errant loop calling /investigate burns $500 in Claude credits
 in minutes. This is the most aggressively rate-limited endpoint in the system.
@@ -14,13 +17,21 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from app.auth import AuthContext, get_current_user
 from app.config import settings
 from app.db import get_service_db
-from app.ratelimit import rate_limit
+from app.services.pipeline_events import log_pipeline_event
+from app.middleware.rate_limit import (
+    INVESTIGATE_ORG_DAY,
+    INVESTIGATE_USER_HOUR,
+    INVESTIGATE_USER_MINUTE,
+    get_org_key,
+    get_user_key,
+    limiter,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +96,75 @@ async def _run_pipeline_background(
         )
         result = await pipeline.run(alert_data)
 
+        # --- Pipeline halted (e.g. empty OFAC SDN tables) -------------
+        if result.halted:
+            error_msgs = "; ".join(e.error_message for e in result.step_errors)
+            logger.error("Pipeline halted for case %s: %s", case_id, error_msgs)
+
+            failed_steps = [
+                {
+                    "organization_id": organization_id,
+                    "case_id": case_id,
+                    "name": "parse",
+                    "description": "Parsed alert into structured data",
+                    "status": "completed",
+                    "source_data": result.parsed_alert.model_dump(mode="json"),
+                    "confidence_score": 1.0,
+                    "created_by": user_id,
+                },
+                {
+                    "organization_id": organization_id,
+                    "case_id": case_id,
+                    "name": "gather",
+                    "description": "Gathered KYC profiles, relationships, history",
+                    "status": "completed",
+                    "source_data": result.gathered_data.model_dump(mode="json"),
+                    "confidence_score": 1.0,
+                    "created_by": user_id,
+                },
+            ]
+            for step_err in result.step_errors:
+                failed_steps.append(
+                    {
+                        "organization_id": organization_id,
+                        "case_id": case_id,
+                        "name": step_err.step_name,
+                        "description": step_err.error_message[:500],
+                        "status": "failed",
+                        "created_by": user_id,
+                    }
+                )
+            await db.table("investigation_steps").insert(failed_steps).execute()
+            await (
+                db.table("cases")
+                .update(
+                    {
+                        "status": "open",
+                        "description": f"Pipeline halted: {error_msgs}"[:500],
+                    }
+                )
+                .eq("id", case_id)
+                .execute()
+            )
+            return
+
         # --- Store investigation steps --------------------------------
+        screening_source_data = result.screening_bundle.model_dump(mode="json")
+        if result.screening_bundle.coverage_gaps:
+            screening_source_data["coverage_gaps"] = result.screening_bundle.coverage_gaps
+
+        screen_status = (
+            "completed_with_warnings"
+            if result.screening_bundle.is_partial
+            else "completed"
+        )
+        screen_desc = (
+            f"Screened {len(result.screening_bundle.entity_names)} entities — "
+            f"{len(result.screening_bundle.hits)} hits"
+        )
+        if result.screening_bundle.is_partial:
+            screen_desc += " (PARTIAL — some sources unavailable)"
+
         steps_rows = [
             {
                 "organization_id": organization_id,
@@ -111,12 +190,9 @@ async def _run_pipeline_background(
                 "organization_id": organization_id,
                 "case_id": case_id,
                 "name": "screen",
-                "description": (
-                    f"Screened {len(result.screening_bundle.entity_names)} entities — "
-                    f"{len(result.screening_bundle.hits)} hits"
-                ),
-                "status": "completed",
-                "source_data": result.screening_bundle.model_dump(mode="json"),
+                "description": screen_desc,
+                "status": screen_status,
+                "source_data": screening_source_data,
                 "confidence_score": 1.0,
                 "created_by": user_id,
             },
@@ -146,6 +222,28 @@ async def _run_pipeline_background(
             "step3_screen": "screen",
             "step4_analyze": "analyze",
         }
+
+        # --- Pipeline event: partial screening coverage -----------------
+        if result.screening_bundle.is_partial:
+            await log_pipeline_event(
+                db,
+                organization_id=organization_id,
+                case_id=case_id,
+                user_id=user_id,
+                event_type="screening_partial",
+                message=(
+                    f"Screening coverage was partial: "
+                    f"{len(result.screening_bundle.coverage_gaps)} gap(s)"
+                ),
+                details={
+                    "coverage_gaps": result.screening_bundle.coverage_gaps,
+                    "sources_queried": result.screening_bundle.sources_queried,
+                    "source_results": [
+                        sr.model_dump(mode="json")
+                        for sr in result.screening_bundle.source_results
+                    ],
+                },
+            )
 
         # --- Store screening results ----------------------------------
         screening_rows = [
@@ -191,7 +289,7 @@ async def _run_pipeline_background(
         narrative_result = await db.table("narratives").insert(narrative_row).execute()
         narrative_id = narrative_result.data[0]["id"]
 
-        # --- Create narrative sections --------------------------------
+        # --- Create narrative sections (content already firewall-cleaned) -
         section_rows = [
             {
                 "organization_id": organization_id,
@@ -204,35 +302,99 @@ async def _run_pipeline_background(
             }
             for idx, section in enumerate(result.narrative.sections)
         ]
+        section_id_map: dict[str, str] = {}
         if section_rows:
-            await db.table("narrative_sections").insert(section_rows).execute()
-
-        # --- Store evidence links (one per EvidenceItem) -------------
-        evidence_link_rows = []
-        for item in result.evidence_items:
-            step_name = source_to_step.get(item.source)
-            step_id = step_id_map.get(step_name) if step_name else None
-            if step_id is None:
-                # Fallback: link to the "analyze" step if source not mapped
-                step_id = step_id_map.get("analyze")
-            if step_id is None:
-                continue  # no step to link — skip rather than violate FK
-
-            evidence_link_rows.append(
-                {
-                    "organization_id": organization_id,
-                    "narrative_id": narrative_id,
-                    "sentence_text": f"[{item.category.upper()}] {item.description}: {item.value}"[:500],
-                    "source_type": "investigation_step",
-                    "investigation_step_id": step_id,
-                    "evidence_ref": item.id,
-                    "source_data": item.model_dump(mode="json"),
-                    "created_by": user_id,
-                }
+            section_result = await (
+                db.table("narrative_sections").insert(section_rows).execute()
             )
+            section_id_map = {
+                row["section_key"]: row["id"]
+                for row in (section_result.data or [])
+            }
+
+        # --- Evidence links: ONLY for IDs kept by the firewall --------
+        evidence_by_id = {item.id: item for item in result.evidence_items}
+        evidence_link_rows = []
+        for fw in result.firewall_results:
+            section_id = section_id_map.get(fw.section_key)
+            if not section_id:
+                continue
+            for evid_id in fw.kept_ids:
+                item = evidence_by_id.get(evid_id)
+                if not item:
+                    continue
+                step_name = source_to_step.get(item.source)
+                step_id = step_id_map.get(step_name) if step_name else None
+                if step_id is None:
+                    step_id = step_id_map.get("analyze")
+                if step_id is None:
+                    continue
+                evidence_link_rows.append(
+                    {
+                        "organization_id": organization_id,
+                        "narrative_id": narrative_id,
+                        "section_id": section_id,
+                        "sentence_text": (
+                            f"[{item.category.upper()}] "
+                            f"{item.description}: {item.value}"
+                        )[:500],
+                        "source_type": "investigation_step",
+                        "investigation_step_id": step_id,
+                        "evidence_ref": item.id,
+                        "source_data": item.model_dump(mode="json"),
+                        "created_by": user_id,
+                    }
+                )
         if evidence_link_rows:
             await db.table("evidence_links").insert(evidence_link_rows).execute()
-        logger.info("Stored %d evidence links for narrative=%s", len(evidence_link_rows), narrative_id)
+        logger.info(
+            "Stored %d evidence links for narrative=%s",
+            len(evidence_link_rows),
+            narrative_id,
+        )
+
+        # --- Firewall strip log (always written, even when strip_rate=0) -
+        strip_log_rows = []
+        for fw in result.firewall_results:
+            section_id = section_id_map.get(fw.section_key)
+            if not section_id:
+                continue
+            strip_log_rows.append(
+                {
+                    "case_id": case_id,
+                    "section_id": section_id,
+                    "stripped_evidence_ids": fw.stripped_ids,
+                    "stripped_count": len(fw.stripped_ids),
+                    "total_cited_count": len(fw.kept_ids) + len(fw.stripped_ids),
+                }
+            )
+        if strip_log_rows:
+            await db.table("firewall_strip_log").insert(strip_log_rows).execute()
+
+        # --- Firewall anomaly logging ---------------------------------
+        for fw in result.firewall_results:
+            if fw.strip_rate > 0.2:
+                logger.warning(
+                    "Firewall high strip rate: case_id=%s section=%s "
+                    "strip_rate=%.2f stripped_count=%d stripped_ids=%s",
+                    case_id,
+                    fw.section_key,
+                    fw.strip_rate,
+                    len(fw.stripped_ids),
+                    fw.stripped_ids,
+                )
+        total_kept = sum(len(fw.kept_ids) for fw in result.firewall_results)
+        total_stripped = sum(len(fw.stripped_ids) for fw in result.firewall_results)
+        total_cited = total_kept + total_stripped
+        if total_cited > 0 and total_stripped / total_cited > 0.3:
+            logger.critical(
+                "Narrative firewall stripped >30%% of citations — prompt needs "
+                "review. case_id=%s strip_rate=%.2f stripped=%d total=%d",
+                case_id,
+                total_stripped / total_cited,
+                total_stripped,
+                total_cited,
+            )
 
         # --- Log LLM usage -------------------------------------------
         if result.llm_usage:
@@ -254,6 +416,16 @@ async def _run_pipeline_background(
                 u.input_tokens,
                 u.output_tokens,
                 u.cost_usd,
+            )
+
+            # --- Cost anomaly detection (observability, never blocks) -
+            from app.services.cost_monitor import check_cost_anomaly
+
+            await check_cost_anomaly(
+                case_id=case_id,
+                cost_usd=u.cost_usd,
+                input_tokens=u.input_tokens,
+                output_tokens=u.output_tokens,
             )
 
         # --- Mark case as ready for review ----------------------------
@@ -323,11 +495,14 @@ async def _run_pipeline_background(
     response_model=InvestigateResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
+@limiter.limit(INVESTIGATE_USER_MINUTE, key_func=get_user_key)
+@limiter.limit(INVESTIGATE_USER_HOUR, key_func=get_user_key)
+@limiter.limit(INVESTIGATE_ORG_DAY, key_func=get_org_key)
 async def investigate(
+    request: Request,
     body: InvestigateRequest,
     background_tasks: BackgroundTasks,
     auth: AuthContext = Depends(get_current_user),
-    _rl: None = Depends(rate_limit(5, 60)),  # ← 5/min — STRICT
 ) -> InvestigateResponse:
     """
     Run the full evidence-first investigation pipeline.
@@ -343,7 +518,7 @@ async def investigate(
     Returns immediately with ``case_id``.
     Poll **GET /cases/{case_id}** for results.
 
-    **Rate-limited to 5 requests / minute per user.**
+    **Rate-limited: 10/min, 100/hour per user; 500/day per org.**
     """
     if not body.alert_id and not body.alert_data:
         raise HTTPException(
@@ -355,6 +530,22 @@ async def investigate(
         raise HTTPException(status_code=503, detail="Supabase not configured")
 
     db = await get_service_db()
+
+    # --- Pre-flight: refuse to start if OFAC SDN tables are empty ------
+    ofac_count = await (
+        db.table("ofac_sdn_entries")
+        .select("id", count="exact")
+        .limit(0)
+        .execute()
+    )
+    if (ofac_count.count or 0) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "OFAC SDN tables are empty — screening cannot proceed safely. "
+                "Run POST /screening/ofac/refresh before starting investigations."
+            ),
+        )
 
     # --- Resolve or create the alert -----------------------------------
     if body.alert_id:
