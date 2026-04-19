@@ -196,7 +196,7 @@ async def screen_opensanctions(
             data: dict[str, Any] = response.json()
     except httpx.HTTPError as exc:
         logger.error("OpenSanctions API error for '%s': %s", name, exc)
-        return []
+        raise
 
     # --- Parse results ---
     matches: list[ScreeningMatch] = []
