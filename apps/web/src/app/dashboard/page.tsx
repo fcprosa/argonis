@@ -6,7 +6,6 @@ import { listCases } from "@/lib/api";
 import type { CaseSummary } from "@/lib/types";
 import {
   SAMPLE_CASES,
-  SAMPLE_RISK_SCORES,
   parseAlertType,
   parseCustomerName,
   riskLabel,
@@ -20,10 +19,9 @@ type SortKey = "risk" | "created_at" | "status";
 export default function AlertQueuePage() {
   const router = useRouter();
   const [cases, setCases] = useState<CaseSummary[]>([]);
-  const [riskScores, setRiskScores] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sort, setSort] = useState<SortKey>("risk");
+  const [sort, setSort] = useState<SortKey>("created_at");
   const [demoMode, setDemoMode] = useState(false);
 
   const isDemoAllowed = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
@@ -33,24 +31,16 @@ export default function AlertQueuePage() {
     setError(null);
     try {
       const data = await listCases({ limit: 100 });
-      const scores: Record<string, number> = {};
-      data.forEach((c) => {
-        const m = c.description?.match(/score (0\.\d+)/);
-        if (m && m[1] != null) scores[c.id] = parseFloat(m[1]);
-      });
       setCases(data);
-      setRiskScores(scores);
       setDemoMode(false);
     } catch {
       if (isDemoAllowed) {
         setError("API unreachable — showing sample data.");
         setCases(SAMPLE_CASES);
-        setRiskScores(SAMPLE_RISK_SCORES);
         setDemoMode(true);
       } else {
         setError("Unable to reach investigation API. Check your connection or contact support.");
         setCases([]);
-        setRiskScores({});
         setDemoMode(false);
       }
     } finally {
@@ -65,16 +55,25 @@ export default function AlertQueuePage() {
   function loadSampleData() {
     if (!isDemoAllowed) return;
     setCases(SAMPLE_CASES);
-    setRiskScores(SAMPLE_RISK_SCORES);
     setDemoMode(true);
     setError(null);
     setLoading(false);
   }
 
   const sorted = [...cases].sort((a, b) => {
-    if (sort === "risk") return (riskScores[b.id] ?? 0) - (riskScores[a.id] ?? 0);
-    if (sort === "status") return a.status.localeCompare(b.status);
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    const byCreated = () =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    const byRisk = () => (b.risk_score ?? 0) - (a.risk_score ?? 0);
+    if (sort === "risk") return byRisk() || byCreated();
+    if (sort === "status") {
+      const s = a.status.localeCompare(b.status);
+      return s !== 0 ? s : byCreated();
+    }
+    if (sort === "created_at") {
+      const c = byCreated();
+      return c !== 0 ? c : byRisk();
+    }
+    return byCreated() || byRisk();
   });
 
   return (
@@ -137,7 +136,7 @@ export default function AlertQueuePage() {
             { label: "Total", value: cases.length, color: "text-white" },
             {
               label: "Critical",
-              value: cases.filter((c) => (riskScores[c.id] ?? 0) >= 0.85).length,
+              value: cases.filter((c) => (c.risk_score ?? 0) >= 0.85).length,
               color: "text-danger-DEFAULT",
             },
             {
@@ -171,7 +170,10 @@ export default function AlertQueuePage() {
         {loading ? (
           <LoadingSkeleton />
         ) : cases.length === 0 ? (
-          <EmptyState onSample={isDemoAllowed ? loadSampleData : undefined} />
+          <EmptyState
+            isDemo={isDemoAllowed}
+            onSample={isDemoAllowed ? loadSampleData : undefined}
+          />
         ) : (
           <table className="w-full border-collapse text-xs">
             <thead className="sticky top-0 z-10 bg-surface-1">
@@ -186,12 +188,14 @@ export default function AlertQueuePage() {
             </thead>
             <tbody>
               {sorted.map((c) => {
-                const score = riskScores[c.id];
+                const score = c.risk_score ?? null;
                 const { label: statusLabel, classes: statusClasses } = statusMeta(c.status);
                 return (
                   <tr
                     key={c.id}
-                    onClick={() => { window.location.href = `/dashboard/case/${c.id}`; }}
+                    onClick={() => {
+                      window.location.href = `/dashboard/cases/${c.id}`;
+                    }}
                     className="cursor-pointer border-b border-border transition-colors hover:bg-surface-2"
                   >
                     <td className="py-2.5 pl-5 pr-4 font-mono text-[11px] text-text-muted whitespace-nowrap">
@@ -289,14 +293,24 @@ function LoadingSkeleton() {
   );
 }
 
-function EmptyState({ onSample }: { onSample?: (() => void) | undefined }) {
+function EmptyState({
+  isDemo,
+  onSample,
+}: {
+  isDemo: boolean;
+  onSample?: (() => void) | undefined;
+}) {
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center">
-      <p className="text-xs text-text-muted">No cases found.</p>
+      <p className="text-xs text-text-muted">
+        {isDemo ? "Demo data not loaded." : "No cases available."}
+      </p>
       <p className="mt-1 text-[11px] text-text-faint">
-        {onSample
-          ? "Connect the API or load sample data to get started."
-          : "Connect the API to get started."}
+        {isDemo
+          ? "Run: python3 scripts/seed_demo.py from apps/api (with .venv activated)."
+          : onSample
+            ? "Connect the API or load sample data to get started."
+            : "Connect the API to get started."}
       </p>
       {onSample && (
         <button

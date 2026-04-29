@@ -2,17 +2,21 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
-import { getCase, runInvestigation, exportNarrativePdf, ApiError } from "@/lib/api";
-import type { CaseDetail, InvestigationStep, ScreeningResult } from "@/lib/types";
 import {
-  SAMPLE_CASE_DETAIL,
-  parseAlertType,
-  parseCustomerName,
-  riskLabel,
-  riskColors,
-  statusMeta,
-  fmtDate,
-} from "@/lib/sample-data";
+  getCase,
+  getCaseMetadata,
+  runInvestigation,
+  exportNarrativePdf,
+  ApiError,
+} from "@/lib/api";
+import type {
+  CaseDetail,
+  CaseMetadata,
+  InvestigationStep,
+  ScreeningResult,
+} from "@/lib/types";
+import { EvidencePanel } from "@/components/EvidencePanel";
+import { SAMPLE_CASE_DETAIL, statusMeta, fmtDate } from "@/lib/sample-data";
 import { NarrativeViewer, DemoDataBanner } from "@/components/NarrativeViewer";
 
 // Pipeline step definitions — display order + labels
@@ -38,6 +42,7 @@ export default function CaseDetailPage({
   const { id } = params;
 
   const [detail, setDetail] = useState<CaseDetail | null>(null);
+  const [caseMetadata, setCaseMetadata] = useState<CaseMetadata | null>(null);
   const [loading, setLoading] = useState(true);
   const [demoMode, setDemoMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +64,12 @@ export default function CaseDetailPage({
       const data = await getCase(id);
       setDetail(data);
       setDemoMode(false);
+      try {
+        const meta = await getCaseMetadata(id);
+        setCaseMetadata(meta);
+      } catch {
+        setCaseMetadata(null);
+      }
       return data;
     } catch (err) {
       if (isDemoAllowed) {
@@ -66,6 +77,7 @@ export default function CaseDetailPage({
         if (sample) {
           setDetail(sample);
           setDemoMode(true);
+          setCaseMetadata(null);
           return sample;
         }
       }
@@ -192,13 +204,16 @@ export default function CaseDetailPage({
   );
   const riskScore =
     (analyzeStep?.confidence_score as number | null | undefined) ?? null;
+  const analyzeSrc = (analyzeStep?.source_data ?? {}) as Record<string, unknown>;
+  const recommendedAction = String(
+    analyzeSrc.recommended_action ?? "investigate",
+  );
   const completedStepKeys = new Set<string>(
     detail?.investigation_steps.map((s) => s.name) ?? [],
   );
   if ((detail?.narratives.length ?? 0) > 0) completedStepKeys.add("narrate");
 
   const narrative = detail?.narratives[0] ?? null;
-  const caseTitle = detail?.case.title ?? "";
   const caseStatus = detail?.case.status ?? "open";
   const { label: statusLabel, classes: statusClasses } = statusMeta(caseStatus);
 
@@ -248,69 +263,17 @@ export default function CaseDetailPage({
         )}
       </header>
 
-      {/* Demo data banner — persistent, not dismissible */}
-      {demoMode && (
-        <div className="shrink-0 bg-red-900 px-6 py-2.5 border-b border-red-800">
-          <p className="text-sm font-semibold text-white">
-            ⚠ DEMO DATA — NOT REAL PIPELINE OUTPUT. API unreachable or demo mode enabled.
-          </p>
-        </div>
-      )}
-
       {/* Scrollable body */}
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-        {/* Case header card */}
-        <div className="rounded-lg border border-gray-200 bg-white p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-xs text-gray-400 mb-1">
-                {parseAlertType(caseTitle)}
-              </p>
-              <h2 className="text-base font-semibold text-gray-900 leading-tight">
-                {parseCustomerName(caseTitle)}
-              </h2>
-              {detail?.case.description && (
-                <p className="mt-1 text-xs text-gray-500 leading-relaxed">
-                  {detail.case.description}
-                </p>
-              )}
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {riskScore != null && (
-                <span
-                  className={[
-                    "rounded px-2 py-0.5 text-xs font-semibold",
-                    riskColors(riskScore),
-                  ].join(" ")}
-                >
-                  {riskLabel(riskScore)} · {(riskScore * 100).toFixed(0)}%
-                </span>
-              )}
-              <span
-                className={[
-                  "rounded px-2 py-0.5 text-xs font-medium",
-                  statusClasses,
-                ].join(" ")}
-              >
-                {statusLabel}
-              </span>
-            </div>
-          </div>
-          <div className="mt-3 flex gap-6 text-xs text-gray-400">
-            <span>
-              Case{" "}
-              <span className="font-mono text-gray-600">
-                {id.slice(-8).toUpperCase()}
-              </span>
-            </span>
-            {detail?.case.created_at && (
-              <span>Created {fmtDate(detail.case.created_at)}</span>
-            )}
-            {detail?.case.updated_at && (
-              <span>Updated {fmtDate(detail.case.updated_at)}</span>
-            )}
-          </div>
-        </div>
+        <p className="text-[11px] text-text-muted">
+          <span className="font-mono text-text-faint">{id.slice(-8).toUpperCase()}</span>
+          {detail?.case.created_at && (
+            <span className="ml-3">Created {fmtDate(detail.case.created_at)}</span>
+          )}
+          <span className={`ml-2 rounded px-1.5 py-0.5 text-[10px] ${statusClasses}`}>
+            {statusLabel}
+          </span>
+        </p>
 
         {/* Pipeline progress */}
         <PipelinePanel
@@ -353,18 +316,42 @@ export default function CaseDetailPage({
           </div>
         )}
 
-        {/* Narrative viewer */}
+        {/* Narrative + evidence */}
         {narrative && (
-          <NarrativeViewer
-            narrative={narrative}
-            evidenceLinks={detail?.evidence_links ?? []}
-            overallConfidence={riskScore}
-            demoMode={demoMode}
-            onSectionApproved={async () => {
-              const fresh = await loadCase();
-              if (fresh) setDetail(fresh);
-            }}
-          />
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+            <aside className="order-first w-full shrink-0 lg:sticky lg:top-4 lg:order-2 lg:w-96">
+              <details
+                open
+                className="rounded border border-border bg-surface-1 lg:border-0 lg:bg-transparent"
+              >
+                <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-white lg:hidden [&::-webkit-details-marker]:hidden">
+                  Evidence ({detail?.evidence_links.length ?? 0})
+                </summary>
+                <div className="px-3 pb-3 lg:px-0 lg:pb-0">
+                  <EvidencePanel links={detail?.evidence_links ?? []} />
+                </div>
+              </details>
+            </aside>
+            <div className="order-last min-w-0 flex-1 max-w-4xl space-y-5 lg:order-1">
+              <CaseDemoHeader
+                narrativeTitle={narrative.title}
+                riskScore={riskScore}
+                recommendedAction={recommendedAction}
+                detectors={detectorBadges(analyzeSrc)}
+              />
+              <NarrativeViewer
+                narrative={narrative}
+                evidenceLinks={detail?.evidence_links ?? []}
+                overallConfidence={riskScore}
+                demoMode={demoMode}
+                caseMetadata={caseMetadata}
+                onSectionApproved={async () => {
+                  const fresh = await loadCase();
+                  if (fresh) setDetail(fresh);
+                }}
+              />
+            </div>
+          </div>
         )}
 
         {/* Empty state — no investigation yet */}
@@ -387,6 +374,102 @@ export default function CaseDetailPage({
             </div>
           )}
       </div>
+    </div>
+  );
+}
+
+function detectorBadges(src: Record<string, unknown>): string[] {
+  const keys = [
+    "structuring",
+    "layering",
+    "funnel",
+    "velocity",
+    "geographic_risk",
+  ] as const;
+  const out: string[] = [];
+  for (const k of keys) {
+    const v = src[k] as { detected?: boolean } | undefined;
+    if (v && typeof v === "object" && v.detected === true) out.push(k);
+  }
+  return out;
+}
+
+function CaseDemoHeader({
+  narrativeTitle,
+  riskScore,
+  recommendedAction,
+  detectors,
+}: {
+  narrativeTitle: string;
+  riskScore: number | null;
+  recommendedAction: string;
+  detectors: string[];
+}) {
+  const pct = riskScore != null ? Math.round(riskScore * 100) : null;
+  const ring =
+    pct == null
+      ? "border-neutral-600 text-neutral-400"
+      : pct >= 70
+        ? "border-red-500 text-red-300"
+        : pct >= 50
+          ? "border-orange-500 text-orange-200"
+          : pct >= 30
+            ? "border-yellow-500 text-yellow-200"
+            : "border-emerald-600 text-emerald-200";
+  const pill =
+    pct == null
+      ? "bg-neutral-800 text-neutral-400"
+      : pct >= 70
+        ? "bg-red-500/15 text-red-200 ring-1 ring-red-500/40"
+        : pct >= 50
+          ? "bg-orange-500/15 text-orange-200 ring-1 ring-orange-500/40"
+          : pct >= 30
+            ? "bg-yellow-500/15 text-yellow-200 ring-1 ring-yellow-500/40"
+            : "bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/40";
+
+  return (
+    <div className="rounded border border-border bg-surface-1 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+            Case narrative
+          </p>
+          <h2 className="mt-1 text-sm font-semibold text-white">{narrativeTitle}</h2>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {pct != null && (
+            <div
+              className={[
+                "flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold",
+                ring,
+              ].join(" ")}
+              title="Risk score"
+            >
+              {pct}%
+            </div>
+          )}
+          <span
+            className={[
+              "rounded px-2 py-1 text-[11px] font-semibold capitalize",
+              pill,
+            ].join(" ")}
+          >
+            {recommendedAction.replace("_", " ")}
+          </span>
+        </div>
+      </div>
+      {detectors.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {detectors.map((d) => (
+            <span
+              key={d}
+              className="rounded bg-surface-2 px-2 py-0.5 font-mono text-[10px] text-text-muted"
+            >
+              {d}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

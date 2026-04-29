@@ -212,6 +212,16 @@ def build_evidence_package(
     for indicator in analysis.high_risk_indicators:
         add("analysis", "High-risk indicator", indicator, "step4_analyze")
 
+    for finding in analysis.overlay_findings:
+        fact = f"{finding.rule_id}: {finding.description}"
+        add(
+            "COMPLIANCE_OVERLAY",
+            finding.rule_id,
+            fact,
+            "compliance_overlay",
+            1.0,
+        )
+
     return items
 
 
@@ -303,6 +313,7 @@ async def narrate(
     client: anthropic.AsyncAnthropic,
     coverage_gaps: list[str] | None = None,
     data_gaps: list[str] | None = None,
+    analysis: AnalysisResult | None = None,
 ) -> tuple[NarrativeOutput, LLMUsage, list[SectionFirewallResult]]:
     """
     Generate the AML investigation narrative from structured evidence only.
@@ -376,11 +387,37 @@ SECTION STRUCTURE:
             "=== END KYC WARNING ===\n"
         )
 
+    overlay_warning_block = ""
+    if analysis and analysis.overlay_findings:
+        lines: list[str] = [
+            "\n\n=== COMPLIANCE OVERLAY FINDINGS ===\n",
+            "The following qualitative compliance rules fired for this investigation. "
+            "These are independent of, and additive to, the quantitative pattern analysis. "
+            "The detailed_narrative section MUST include a dedicated paragraph titled "
+            '"Regulatory Risk Factors" that explains each rule cited below, in plain language, '
+            "and references the regulatory basis.\n",
+        ]
+        for f in analysis.overlay_findings:
+            lines.append(
+                f"\nRule: {f.rule_id}\n"
+                f"Description: {f.description}\n"
+                f"Matched factors: {', '.join(f.matched_factors)}\n"
+                f"Regulatory basis: {f.regulatory_basis}\n"
+            )
+        lines.append(
+            "\nThe recommended_action has been floored to "
+            f'"{analysis.recommended_action}" and the risk score floored to '
+            f"{analysis.overall_risk_score:.2f} based on these overlays.\n"
+            "=== END COMPLIANCE OVERLAY FINDINGS ===\n"
+        )
+        overlay_warning_block = "".join(lines)
+
     user_prompt = (
         f"Write an AML investigation narrative for alert {parsed.alert_id}.\n\n"
         f"{_format_evidence(evidence_items)}"
         f"{coverage_warning_block}"
-        f"{kyc_warning_block}\n\n"
+        f"{kyc_warning_block}"
+        f"{overlay_warning_block}\n\n"
         "Produce a structured narrative with all four required sections. "
         "Cite every fact with [EVID-XXX]. "
         "State whether a SAR must be filed and the legal grounds."

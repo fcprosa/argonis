@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Golden-set CLI runner — daily "5 cases/day" narrative-quality regression tool.
+Golden-set CLI runner — daily narrative-quality regression tool.
 
-Runs the full evidence-first pipeline against all 5 canonical AML typologies,
-prints a summary table, writes full narratives to latest_run/<typology>.md for
+Runs the full evidence-first pipeline against all canonical AML typologies,
+prints a summary table (one row per typology, including CRASH rows), writes
+full narratives to latest_run/<typology>.md for
 human review, and exits 0 on success / 1 on any failure.
 
 Usage:
@@ -28,8 +29,69 @@ import time
 from pathlib import Path
 from typing import Any
 
-# Ensure the app package is importable when running from apps/api/
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from dotenv import load_dotenv
+
+_API_ROOT = Path(__file__).resolve().parent.parent
+
+# Load repo-root .env before any app import (Pydantic reads os.environ).
+_DOTENV = Path("/Users/daniel/argonis/.env")
+if _DOTENV.is_file():
+    load_dotenv(_DOTENV, override=False)
+else:
+    _fallback = _API_ROOT.parent / ".env"
+    load_dotenv(_fallback, override=False)
+
+# Import sanitizer (needs apps/api on path; no app.config yet).
+sys.path.insert(0, str(_API_ROOT))
+from app.env_parse import sanitize_env_secret
+
+
+def _peek_secret_env(name: str, raw: str | None, cleaned: str) -> None:
+    """Temporary debug: first 10 + last 5 of raw (post-dotenv) and cleaned (os.environ)."""
+    def frag(s: str | None) -> str:
+        if s is None:
+            return "<unset>"
+        if not s:
+            return "<empty>"
+        if len(s) <= 15:
+            return repr(s)
+        return f"{s[:10]}…{s[-5:]}"
+
+    print(f"[env debug] {name} raw (after load_dotenv): {frag(raw)} len={len(raw or '')}", flush=True)
+    print(f"[env debug] {name} cleaned (after sanitize): {frag(cleaned)} len={len(cleaned)}", flush=True)
+    if raw is not None and raw != cleaned:
+        reasons: list[str] = []
+        if raw.strip() != raw:
+            reasons.append("leading/trailing whitespace")
+        if "\r" in raw:
+            reasons.append("contains \\r")
+        if "\n" in raw:
+            reasons.append("contains \\n")
+        if raw.startswith("\ufeff"):
+            reasons.append("UTF-8 BOM prefix")
+        if (len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ('"', "'")) or (
+            len(cleaned) >= 2 and raw != cleaned and raw.strip().startswith(("'", '"'))
+        ):
+            reasons.append("outer quotes (stripped)")
+        print(
+            f"[env debug] {name} raw≠cleaned ({'; '.join(reasons) or 'normalized'}) "
+            f"raw: {frag(raw)} len_raw={len(raw)}",
+            flush=True,
+        )
+
+
+for _secret_key in ("ANTHROPIC_API_KEY", "OPENSANCTIONS_API_KEY"):
+    _raw = os.environ.get(_secret_key)
+    _cleaned = sanitize_env_secret(_raw)
+    os.environ[_secret_key] = _cleaned
+    _peek_secret_env(_secret_key, _raw, _cleaned)
+
+if not os.environ.get("ANTHROPIC_API_KEY"):
+    print(
+        "\033[91mERRO: ANTHROPIC_API_KEY em falta no .env\033[0m",
+        file=sys.stderr,
+    )
+    sys.exit("ERRO: ANTHROPIC_API_KEY em falta no .env")
 
 from app.config import settings
 from app.pipeline.core import EvidencePipeline
@@ -259,11 +321,13 @@ def write_narrative_md(typology: str, result: EvidencePipelineResult) -> Path:
 
 
 def print_summary(
+    typologies: list[str],
     results: dict[str, tuple[EvidencePipelineResult, float, list[str]]],
+    crashed: dict[str, str],
 ) -> None:
-    """Print a formatted summary table to stdout."""
+    """Print a formatted summary table to stdout (one row per typology, incl. CRASH)."""
     col_w = {
-        "typology": 14,
+        "typology": 18,
         "detectors": 40,
         "cost": 10,
         "duration": 10,
@@ -287,9 +351,33 @@ def print_summary(
     print(header)
     print(sep)
 
-    for typology in TYPOLOGIES:
-        if typology not in results:
+    for typology in typologies:
+        if typology in crashed:
+            err = crashed[typology][:120] + ("…" if len(crashed[typology]) > 120 else "")
+            print(
+                f"| {typology:<{col_w['typology']}} "
+                f"| {'(crash)':<{col_w['detectors']}} "
+                f"| {'N/A':<{col_w['cost']}} "
+                f"| {'N/A':<{col_w['duration']}} "
+                f"| {'N/A':<{col_w['sections']}} "
+                f"| {'N/A':<{col_w['strip']}} "
+                f"| {'CRASH':<{col_w['status']}} |"
+            )
+            print(f"|   CRASH: {err}")
             continue
+
+        if typology not in results:
+            print(
+                f"| {typology:<{col_w['typology']}} "
+                f"| {'(skipped)':<{col_w['detectors']}} "
+                f"| {'N/A':<{col_w['cost']}} "
+                f"| {'N/A':<{col_w['duration']}} "
+                f"| {'N/A':<{col_w['sections']}} "
+                f"| {'N/A':<{col_w['strip']}} "
+                f"| {'SKIP':<{col_w['status']}} |"
+            )
+            continue
+
         result, duration, failures = results[typology]
         analysis = result.analysis_result
         usage = result.llm_usage
@@ -338,10 +426,6 @@ def print_summary(
 
 async def main(typologies: list[str]) -> bool:
     """Run golden set. Returns True if all pass."""
-    if not os.getenv("ANTHROPIC_API_KEY") and not settings.anthropic_api_key:
-        print("ERROR: ANTHROPIC_API_KEY not set", file=sys.stderr)
-        return False
-
     pipeline = EvidencePipeline(
         api_key=settings.anthropic_api_key or None,
         supabase_url=settings.supabase_url,
@@ -351,6 +435,7 @@ async def main(typologies: list[str]) -> bool:
     )
 
     all_results: dict[str, tuple[EvidencePipelineResult, float, list[str]]] = {}
+    crashed: dict[str, str] = {}
     all_pass = True
 
     for typology in typologies:
@@ -361,6 +446,7 @@ async def main(typologies: list[str]) -> bool:
             result, duration = await run_single(typology, pipeline)
         except Exception as exc:
             print(f"  ✗ {typology} — pipeline crashed: {exc}", file=sys.stderr)
+            crashed[typology] = str(exc)
             all_pass = False
             continue
 
@@ -378,7 +464,7 @@ async def main(typologies: list[str]) -> bool:
             for f in failures:
                 print(f"    FAIL: {f}")
 
-    print_summary(all_results)
+    print_summary(typologies, all_results, crashed)
 
     total_cost = sum(
         r.llm_usage.cost_usd

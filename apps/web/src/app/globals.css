@@ -8,11 +8,32 @@
   }
 
   body {
-    @apply antialiased;
+    @apply antialiased bg-neutral-950 text-neutral-100;
+    font-family: system-ui, -apple-system, "SF Pro Text", sans-serif;
     font-feature-settings: "cv11", "ss01";
-    /* Dark theme base — dashboard overrides per-layout */
-    background-color: #0a0a0a;
-    color: #ffffff;
+  }
+
+  .font-data {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  .narrative-prose {
+    font-size: 15px;
+    line-height: 1.6;
+    max-width: 72ch;
+  }
+
+  .narrative-viewer h3,
+  .narrative-viewer h4 {
+    font-weight: 600;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgb(163 163 163);
+    border-bottom: 1px solid rgb(38 38 38);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
   }
 
   /* Dark scrollbars */

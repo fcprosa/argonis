@@ -16,6 +16,8 @@ export const SAMPLE_CASES: CaseSummary[] = [
     created_by: "demo",
     created_at: "2026-04-02T09:15:00Z",
     updated_at: "2026-04-02T09:47:00Z",
+    risk_score: 0.87,
+    recommended_action: "escalate",
   },
   {
     id: "demo-case-002",
@@ -28,6 +30,8 @@ export const SAMPLE_CASES: CaseSummary[] = [
     created_by: "demo",
     created_at: "2026-04-02T11:30:00Z",
     updated_at: "2026-04-02T14:55:00Z",
+    risk_score: 0.61,
+    recommended_action: "investigate",
   },
   {
     id: "demo-case-003",
@@ -40,18 +44,10 @@ export const SAMPLE_CASES: CaseSummary[] = [
     created_by: "demo",
     created_at: "2026-04-03T08:05:00Z",
     updated_at: "2026-04-03T10:22:00Z",
+    risk_score: 0.94,
+    recommended_action: "file_sar",
   },
 ];
-
-// ---------------------------------------------------------------------------
-// Sample risk scores — derived from demo analysis step
-// ---------------------------------------------------------------------------
-
-export const SAMPLE_RISK_SCORES: Record<string, number> = {
-  "demo-case-001": 0.87,
-  "demo-case-002": 0.61,
-  "demo-case-003": 0.94,
-};
 
 // ---------------------------------------------------------------------------
 // Full sample case detail (demo-case-001 only — the "investigated" demo case)

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { DemoModeBanner } from "@/components/DemoModeBanner";
+
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Alert Queue", icon: "▤" },
   { href: "/dashboard/upload", label: "Upload Alerts", icon: "↑" },
@@ -76,7 +78,10 @@ export default function DashboardLayout({
         </aside>
 
         {/* Content */}
-        <main className="flex flex-1 flex-col overflow-hidden">{children}</main>
+        <main className="flex flex-1 flex-col overflow-hidden">
+          <DemoModeBanner />
+          {children}
+        </main>
       </div>
     </>
   );

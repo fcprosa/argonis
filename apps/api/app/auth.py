@@ -4,12 +4,8 @@ Supabase JWT authentication for FastAPI.
 All endpoints (except /health) require a valid Supabase JWT in the
 Authorization header. The JWT is verified locally using SUPABASE_JWT_SECRET.
 
-Flow:
-  1. Client authenticates via Supabase Auth (email/password, OAuth, etc.)
-  2. Client sends access_token as `Authorization: Bearer <token>`
-  3. This module decodes + verifies the token with HS256 + the JWT secret
-  4. Looks up the user record in `users` table (organization_id, role)
-  5. Returns an AuthContext to the endpoint handler
+Demo mode (DEMO_MODE=true): GET requests with header ``X-Demo-Mode: true`` use a
+synthetic AuthContext (no JWT). Non-GET always requires JWT.
 """
 
 from __future__ import annotations
@@ -18,14 +14,14 @@ import logging
 from dataclasses import dataclass
 
 import jwt as pyjwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-_bearer_scheme = HTTPBearer(auto_error=True)
+_bearer_scheme = HTTPBearer(auto_error=False)
 
 
 # ---------------------------------------------------------------------------
@@ -69,17 +65,33 @@ async def _get_user_record(user_id: str) -> dict:
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
 ) -> AuthContext:
     """
     FastAPI dependency — verify Supabase JWT and return AuthContext.
 
-    Usage::
-
-        @router.get("/protected")
-        async def protected(auth: AuthContext = Depends(get_current_user)):
-            print(auth.user_id, auth.organization_id)
+    Demo bypass: ``DEMO_MODE`` + ``GET`` + ``X-Demo-Mode: true`` → synthetic
+    analyst context for ``DEMO_ORG_ID`` / ``DEMO_USER_ID``.
     """
+    if (
+        settings.demo_mode
+        and request.method == "GET"
+        and request.headers.get("x-demo-mode", "").lower() == "true"
+    ):
+        return AuthContext(
+            user_id=settings.demo_user_id.strip(),
+            organization_id=settings.demo_org_id.strip(),
+            role="analyst",
+            email="demo@argonis.local",
+        )
+
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+
     token = credentials.credentials
 
     if not settings.supabase_jwt_secret:
@@ -88,7 +100,6 @@ async def get_current_user(
             detail="Authentication not configured (SUPABASE_JWT_SECRET required)",
         )
 
-    # --- Decode + verify the JWT ---
     try:
         payload = pyjwt.decode(
             token,
@@ -114,7 +125,6 @@ async def get_current_user(
             detail="Token missing 'sub' claim",
         )
 
-    # --- Fetch user record for org + role ---
     try:
         user_record = await _get_user_record(user_id)
     except Exception as exc:

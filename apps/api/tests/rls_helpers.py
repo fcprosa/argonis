@@ -30,15 +30,6 @@ def _env(name: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def mint_anon_key(jwt_secret: str) -> str:
-    """Derive a Supabase-compatible anon key from the project JWT secret."""
-    return pyjwt.encode(
-        {"role": "anon", "iss": "supabase"},
-        jwt_secret,
-        algorithm="HS256",
-    )
-
-
 def mint_user_jwt(user_id: str, jwt_secret: str) -> str:
     """Mint a short-lived authenticated-role JWT for *user_id*."""
     now = int(time.time())
@@ -64,19 +55,29 @@ def supabase_client_as(
     user_id: str,
     supabase_url: str | None = None,
     jwt_secret: str | None = None,
+    anon_key: str | None = None,
 ) -> AsyncPostgrestClient:
     """PostgREST client operating as *user_id* with RLS enforced.
 
-    Uses an anon-key ``apikey`` header so PostgREST applies RLS, and a
-    user JWT in the ``Authorization`` header so ``auth.uid()`` resolves
-    to *user_id*.
+    The ``apikey`` header must be the project's real anon JWT (Supabase rejects
+    a minimal self-signed ``role=anon`` token with 401). ``Authorization`` is
+    the end-user JWT so ``auth.uid()`` resolves to *user_id*.
     """
     url = supabase_url or _env("SUPABASE_URL")
     secret = jwt_secret or _env("SUPABASE_JWT_SECRET")
+    key = (
+        (anon_key or "").strip()
+        or os.environ.get("SUPABASE_ANON_KEY", "").strip()
+        or os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY", "").strip()
+    )
+    if not key:
+        raise RuntimeError(
+            "SUPABASE_ANON_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY) must be set for RLS tests"
+        )
     return AsyncPostgrestClient(
         f"{url}/rest/v1",
         headers={
-            "apikey": mint_anon_key(secret),
+            "apikey": key,
             "Authorization": f"Bearer {mint_user_jwt(user_id, secret)}",
         },
     )

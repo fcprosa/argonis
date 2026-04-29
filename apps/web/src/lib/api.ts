@@ -3,6 +3,7 @@
 import type {
   CaseSummary,
   CaseDetail,
+  CaseMetadata,
   InvestigateResponse,
   NarrativeDetail,
   NarrativeSection,
@@ -17,6 +18,20 @@ const API_URL =
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("argonis_token");
+}
+
+function mergeAuthHeaders(init?: HeadersInit): Headers {
+  const headers = new Headers(init);
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  const token = getToken();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  } else if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+    headers.set("X-Demo-Mode", "true");
+  }
+  return headers;
 }
 
 /** Store a JWT (call this after Supabase sign-in). */
@@ -43,14 +58,9 @@ export class ApiError extends Error {
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getToken();
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers ?? {}),
-    },
+    headers: mergeAuthHeaders(init?.headers),
   });
 
   if (!res.ok) {
@@ -101,6 +111,10 @@ export function getCase(id: string): Promise<CaseDetail> {
   return req<CaseDetail>(`/cases/${id}`);
 }
 
+export function getCaseMetadata(id: string): Promise<CaseMetadata> {
+  return req<CaseMetadata>(`/cases/${id}/metadata`);
+}
+
 // ---------------------------------------------------------------------------
 // Investigations
 // ---------------------------------------------------------------------------
@@ -124,16 +138,24 @@ export function getNarrative(id: string): Promise<NarrativeDetail> {
 }
 
 export async function exportNarrativePdf(narrativeId: string): Promise<Blob> {
+  const headers = new Headers();
   const token = getToken();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  } else if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+    headers.set("X-Demo-Mode", "true");
+  }
   const res = await fetch(`${API_URL}/narratives/${narrativeId}/export/pdf`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers,
   });
   if (!res.ok) {
     let detail = `HTTP ${res.status}`;
     try {
       const body = await res.json();
       detail = body?.detail ?? detail;
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     throw new ApiError(res.status, detail);
   }
   return res.blob();

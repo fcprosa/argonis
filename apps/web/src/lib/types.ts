@@ -13,6 +13,15 @@ export interface CaseSummary {
   created_by: string;
   created_at: string;
   updated_at: string;
+  /** 0–1 from latest pipeline analyze step; null if not yet analyzed */
+  risk_score?: number | null;
+  recommended_action?:
+    | "dismiss"
+    | "monitor"
+    | "investigate"
+    | "escalate"
+    | "file_sar"
+    | null;
 }
 
 export interface InvestigationStep {
@@ -87,6 +96,17 @@ export interface EvidenceLink {
   char_offset_end: number | null;
   sentence_text: string | null;
   created_at: string;
+  /** Pipeline snapshot (category, description, confidence, …). */
+  source_data?: Record<string, unknown> | null;
+}
+
+export interface CaseMetadata {
+  duration_s: number;
+  cost_usd: number;
+  model: string;
+  total_stripped_citations: number;
+  coverage_gaps: string[];
+  data_gaps: string[];
 }
 
 export interface CaseDetail {

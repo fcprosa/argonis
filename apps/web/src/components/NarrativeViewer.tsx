@@ -1,8 +1,14 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, type ReactNode } from "react";
 import { approveNarrativeSections, editNarrativeSection } from "@/lib/api";
-import type { NarrativeRow, EvidenceLink, NarrativeSection, SectionKey } from "@/lib/types";
+import type {
+  NarrativeRow,
+  EvidenceLink,
+  NarrativeSection,
+  SectionKey,
+  CaseMetadata,
+} from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Section metadata — canonical ordering + display info for pipeline keys
@@ -48,6 +54,7 @@ interface Props {
   evidenceLinks: EvidenceLink[];
   overallConfidence: number | null;
   demoMode: boolean;
+  caseMetadata?: CaseMetadata | null;
   onSectionApproved: () => Promise<void>;
 }
 
@@ -56,6 +63,7 @@ export function NarrativeViewer({
   evidenceLinks,
   overallConfidence,
   demoMode,
+  caseMetadata,
   onSectionApproved,
 }: Props) {
   const [sections, setSections] = useState<NarrativeSection[]>(
@@ -170,19 +178,23 @@ export function NarrativeViewer({
 
   const isPartial = narrative.is_partial_screening ?? false;
   const screeningGaps = narrative.screening_gaps ?? [];
-  const [partialDismissed, setPartialDismissed] = useState(false);
+  const showOfflineDemoBanner =
+    demoMode && process.env.NEXT_PUBLIC_DEMO_MODE !== "true";
 
   return (
-    <div className="space-y-3">
-      {/* Demo data banner */}
-      {demoMode && <DemoDataBanner />}
+    <div className="space-y-3 narrative-viewer">
+      {showOfflineDemoBanner && <DemoDataBanner />}
 
-      {/* Partial screening coverage banner */}
-      {isPartial && !partialDismissed && (
-        <PartialScreeningBanner
-          gaps={screeningGaps}
-          onDismiss={() => setPartialDismissed(true)}
-        />
+      {isPartial && (
+        <div className="rounded border border-orange-300 bg-orange-50 p-3 text-orange-900">
+          <p className="text-sm leading-relaxed">
+            <span className="text-orange-700" aria-hidden>
+              ⚠{" "}
+            </span>
+            Partial screening: {screeningGaps.length ? screeningGaps.join(", ") : "Coverage incomplete"}
+            . A human analyst should supplement this investigation with manual screening before filing.
+          </p>
+        </div>
       )}
 
       {/* Header */}
@@ -243,6 +255,10 @@ export function NarrativeViewer({
             key={meta.key}
             section={section}
             description={meta.description}
+            kycMissingBanner={
+              meta.key === "subject_information" &&
+              section.content.includes("Subject KYC profile was not found")
+            }
             confidence={sectionConfidence(section)}
             evidenceLinks={evidenceLinks}
             isEditing={editingKey === section.section_key}
@@ -268,6 +284,7 @@ export function NarrativeViewer({
               key={section.section_key}
               section={section}
               description={null}
+              kycMissingBanner={false}
               confidence={sectionConfidence(section)}
               evidenceLinks={evidenceLinks}
               isEditing={editingKey === section.section_key}
@@ -284,6 +301,14 @@ export function NarrativeViewer({
           ))}
         </>
       )}
+
+      {caseMetadata && (
+        <footer className="mt-6 border-t border-neutral-800 pt-3 text-xs text-neutral-500">
+          Generated in {caseMetadata.duration_s.toFixed(1)}s · $
+          {caseMetadata.cost_usd.toFixed(4)} · Model: {caseMetadata.model} · Firewall stripped{" "}
+          {caseMetadata.total_stripped_citations} hallucinated citations
+        </footer>
+      )}
     </div>
   );
 }
@@ -295,6 +320,7 @@ export function NarrativeViewer({
 function SectionCard({
   section,
   description,
+  kycMissingBanner,
   confidence,
   evidenceLinks,
   isEditing,
@@ -310,6 +336,7 @@ function SectionCard({
 }: {
   section: NarrativeSection;
   description: string | null;
+  kycMissingBanner: boolean;
   confidence: number | null;
   evidenceLinks: EvidenceLink[];
   isEditing: boolean;
@@ -363,6 +390,16 @@ function SectionCard({
 
       {/* Section body */}
       <div className="px-5 py-4">
+        {kycMissingBanner && (
+          <div className="mb-4 rounded border border-yellow-300 bg-yellow-50 p-3 text-yellow-900">
+            <p className="text-sm leading-relaxed">
+              <span className="text-yellow-700" aria-hidden>
+                ⚠{" "}
+              </span>
+              KYC profile missing at time of investigation. Findings based on transaction patterns and screening only.
+            </p>
+          </div>
+        )}
         {isEditing ? (
           <div className="space-y-2">
             <textarea
@@ -513,48 +550,6 @@ function UnknownSectionBanner({ count }: { count: number }) {
 }
 
 // ---------------------------------------------------------------------------
-// Partial screening coverage banner — dismissible per session, reappears on reload
-// ---------------------------------------------------------------------------
-
-function PartialScreeningBanner({
-  gaps,
-  onDismiss,
-}: {
-  gaps: string[];
-  onDismiss: () => void;
-}) {
-  return (
-    <div className="rounded-lg border border-yellow-400 bg-yellow-50 px-5 py-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-2">
-          <span className="mt-0.5 text-yellow-600 text-sm shrink-0">⚠</span>
-          <div>
-            <p className="text-sm font-semibold text-yellow-800">
-              INCOMPLETE SCREENING COVERAGE
-            </p>
-            <p className="mt-1 text-xs text-yellow-700">
-              {gaps.length > 0
-                ? gaps.join("; ")
-                : "One or more screening sources were unavailable."}
-              {" "}Manual supplementation required before filing.
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={onDismiss}
-          className="shrink-0 rounded p-1 text-yellow-500 hover:bg-yellow-100 hover:text-yellow-700 transition-colors"
-          aria-label="Dismiss screening warning"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Demo data banner — unmissable, non-dismissible
 // ---------------------------------------------------------------------------
 
@@ -565,6 +560,143 @@ export function DemoDataBanner() {
         ⚠ DEMO DATA — NOT REAL PIPELINE OUTPUT. API unreachable or demo mode enabled.
       </p>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Narrative markdown — **bold**, *italic*, [EVID-XXX], INSUFFICIENT EVIDENCE
+// (minimal inline parser; no HTML, no extra deps)
+// ---------------------------------------------------------------------------
+
+const _INLINE_TOKEN =
+  /(INSUFFICIENT EVIDENCE)|(\[EVID-\d{3,}\])|(\*\*[^*]+\*\*)|(\*[^*\n]+\*)/g;
+
+function EvidencePill({
+  evidenceId,
+  title,
+}: {
+  evidenceId: string;
+  title?: string;
+}) {
+  const label = `[${evidenceId}]`;
+  return (
+    <button
+      type="button"
+      title={title ?? evidenceId}
+      onClick={() => {
+        window.dispatchEvent(
+          new CustomEvent("argonis:highlight-evidence", {
+            detail: { evidenceId },
+          }),
+        );
+      }}
+      className="inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded text-[10px] font-mono bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 border border-cyan-500/30 align-baseline"
+    >
+      {label}
+    </button>
+  );
+}
+
+/** One line of prose: markdown tokens + plain runs. */
+function tokenizeInlineLine(
+  line: string,
+  evidenceMap: Map<string, string>,
+  keyPrefix: string,
+): ReactNode[] {
+  const out: ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  const re = new RegExp(_INLINE_TOKEN.source, "g");
+  let k = 0;
+  while ((m = re.exec(line)) !== null) {
+    if (m.index > last) {
+      out.push(line.slice(last, m.index));
+    }
+    if (m[1]) {
+      out.push(
+        <mark
+          key={`${keyPrefix}-ins-${k++}`}
+          className="rounded bg-red-100 px-1 py-0.5 text-red-700 font-semibold not-italic"
+        >
+          INSUFFICIENT EVIDENCE
+        </mark>,
+      );
+    } else if (m[2]) {
+      const ref = m[2].slice(1, -1);
+      const tip = evidenceMap.get(ref);
+      out.push(
+        <EvidencePill
+          key={`${keyPrefix}-ev-${k++}`}
+          evidenceId={ref}
+          {...(tip !== undefined ? { title: tip } : {})}
+        />,
+      );
+    } else if (m[3]) {
+      const inner = m[3].slice(2, -2);
+      out.push(
+        <strong
+          key={`${keyPrefix}-b-${k++}`}
+          className="font-semibold text-neutral-950"
+        >
+          {inner}
+        </strong>,
+      );
+    } else if (m[4]) {
+      const inner = m[4].slice(1, -1);
+      out.push(
+        <em key={`${keyPrefix}-i-${k++}`} className="italic text-neutral-800">
+          {inner}
+        </em>,
+      );
+    }
+    last = re.lastIndex;
+  }
+  if (last < line.length) {
+    out.push(line.slice(last));
+  }
+  return out;
+}
+
+/** One paragraph block: single newlines become <br />. */
+function renderParagraphNodes(
+  para: string,
+  evidenceMap: Map<string, string>,
+  keyPrefix: string,
+): ReactNode[] {
+  const lines = para.split("\n");
+  const nodes: ReactNode[] = [];
+  lines.forEach((line, li) => {
+    if (li > 0) {
+      nodes.push(<br key={`${keyPrefix}-nl-${li}`} />);
+    }
+    nodes.push(...tokenizeInlineLine(line, evidenceMap, `${keyPrefix}-L${li}`));
+  });
+  return nodes;
+}
+
+function renderNarrativeContent(
+  content: string,
+  evidenceMap: Map<string, string>,
+): ReactNode {
+  const rawBlocks = content.split(/\n{2,}/);
+  const blocks = rawBlocks.filter((b) => b.length > 0);
+  const toRender = blocks.length > 0 ? blocks : [content];
+  return (
+    <>
+      {toRender.map((para, pi) => (
+        <p
+          key={pi}
+          className={[
+            "narrative-prose text-sm leading-relaxed text-neutral-900",
+            pi < toRender.length - 1 ? "mb-3" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
+          {renderParagraphNodes(para, evidenceMap, `para-${pi}`)}
+        </p>
+      ))}
+    </>
   );
 }
 
@@ -587,39 +719,7 @@ function SectionContent({
     }
   });
 
-  const SPLIT_RE = /(\[EVID-\d+\]|INSUFFICIENT EVIDENCE)/g;
-  const parts = content.split(SPLIT_RE);
-
-  return (
-    <p className="text-sm text-gray-700 leading-relaxed">
-      {parts.map((part, i) => {
-        if (part === "INSUFFICIENT EVIDENCE") {
-          return (
-            <mark
-              key={i}
-              className="rounded bg-red-100 px-1 py-0.5 text-red-700 font-semibold not-italic"
-            >
-              INSUFFICIENT EVIDENCE
-            </mark>
-          );
-        }
-        if (/^\[EVID-\d+\]$/.test(part)) {
-          const ref = part.slice(1, -1);
-          const tip = evidenceMap.get(ref);
-          return (
-            <span
-              key={i}
-              title={tip ?? ref}
-              className="mx-0.5 cursor-default rounded bg-blue-50 px-1 py-0.5 text-[11px] font-mono text-blue-600 ring-1 ring-blue-200 hover:bg-blue-100 transition-colors"
-            >
-              {part}
-            </span>
-          );
-        }
-        return <span key={i}>{part}</span>;
-      })}
-    </p>
-  );
+  return <>{renderNarrativeContent(content, evidenceMap)}</>;
 }
 
 // ---------------------------------------------------------------------------

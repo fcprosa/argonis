@@ -21,9 +21,9 @@ ENV PORT=8000
 
 EXPOSE ${PORT}
 
-# Health check
+# Health check (PORT is set at container runtime, e.g. Railway)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/health || exit 1
+    CMD sh -c "curl -f http://127.0.0.1:$$PORT/health || exit 1"
 
 # Run with uvicorn
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port $PORT"]

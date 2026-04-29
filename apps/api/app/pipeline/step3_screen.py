@@ -49,6 +49,36 @@ logger = logging.getLogger(__name__)
 
 _SOFT_SOURCE_TIMEOUT_SECONDS = 10
 
+
+def _sanitize_gap_message(source: str, status: str, raw_error: str) -> str:
+    """Map raw screening errors to analyst-facing language (no URLs / HTTP noise)."""
+    s = (source or "").strip().lower()
+    if s == "opensanctions":
+        return (
+            "Sanctions list screening (OpenSanctions) was unavailable — "
+            "no match could be confirmed."
+        )
+    if s == "adverse_media":
+        if (status or "").strip().lower() == "timeout":
+            return "Adverse media screening timed out before completion."
+        return "Adverse media screening was unavailable."
+    if s == "ofac":
+        return "OFAC SDN screening was unavailable."
+    return f"{source} screening was unavailable."
+
+
+def _record_gap(
+    *,
+    coverage_gaps: list[str],
+    coverage_gaps_debug: list[str],
+    source: str,
+    status: str,
+    raw_message: str,
+) -> None:
+    coverage_gaps_debug.append(raw_message)
+    coverage_gaps.append(_sanitize_gap_message(source, status, raw_error=raw_message))
+
+
 # Serper multi-query searches can legitimately take 15–20s on slow networks;
 # 25s gives headroom without letting a real hang block the pipeline indefinitely.
 _ADVERSE_MEDIA_TIMEOUT_SECONDS = 25
@@ -396,6 +426,7 @@ async def screen_entities(
     sources_queried: list[str] = []
     source_results: list[SourceResult] = []
     coverage_gaps: list[str] = []
+    coverage_gaps_debug: list[str] = []
     now = datetime.utcnow()
 
     has_supabase = bool(supabase_url and supabase_key)
@@ -449,16 +480,34 @@ async def screen_entities(
                     source_name=key, status=status, error_message=err_msg,
                 )
                 source_results.append(sr)
-                coverage_gaps.append(f"{key} screening {status}: {err_msg}")
+                raw_gap = f"{key} screening {status}: {err_msg}"
+                _record_gap(
+                    coverage_gaps=coverage_gaps,
+                    coverage_gaps_debug=coverage_gaps_debug,
+                    source=key,
+                    status=status,
+                    raw_message=raw_gap,
+                )
             else:
                 source_results.append(result)
                 if result.status == "success":
                     all_hits.extend(result.matches)
                     sources_queried.append(result.source_name)
                 else:
-                    coverage_gaps.append(
+                    raw_gap = (
                         f"{result.source_name} screening {result.status}"
-                        + (f": {result.error_message}" if result.error_message else "")
+                        + (
+                            f": {result.error_message}"
+                            if result.error_message
+                            else ""
+                        )
+                    )
+                    _record_gap(
+                        coverage_gaps=coverage_gaps,
+                        coverage_gaps_debug=coverage_gaps_debug,
+                        source=result.source_name,
+                        status=result.status,
+                        raw_message=raw_gap,
                     )
 
     if not has_supabase and not opensanctions_api_key:
@@ -488,5 +537,6 @@ async def screen_entities(
         screened_at=now,
         source_results=source_results,
         coverage_gaps=coverage_gaps,
+        coverage_gaps_debug=coverage_gaps_debug,
         is_partial=is_partial,
     )

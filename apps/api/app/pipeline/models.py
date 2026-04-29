@@ -14,6 +14,21 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class OverlayFinding(BaseModel):
+    """Qualitative compliance rule fired after quantitative pattern analysis."""
+
+    model_config = ConfigDict(frozen=True)
+
+    rule_id: str
+    description: str
+    regulatory_basis: str
+    matched_factors: list[str]
+    min_risk_score: float = Field(ge=0.0, le=1.0)
+    min_recommended_action: Literal[
+        "dismiss", "monitor", "investigate", "escalate", "file_sar"
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Step 1: PARSE
 # ---------------------------------------------------------------------------
@@ -141,6 +156,9 @@ class ScreeningBundle(BaseModel):
     screened_at: datetime
     source_results: list[SourceResult] = Field(default_factory=list)
     coverage_gaps: list[str] = Field(default_factory=list)
+    """Analyst-facing gap messages (sanitized)."""
+    coverage_gaps_debug: list[str] = Field(default_factory=list)
+    """Raw technical errors for ops / pipeline_events only."""
     is_partial: bool = False
 
 
@@ -179,6 +197,7 @@ class AnalysisResult(BaseModel):
     overall_risk_score: float = Field(ge=0.0, le=1.0)
     high_risk_indicators: list[str]
     recommended_action: Literal["dismiss", "monitor", "investigate", "escalate", "file_sar"]
+    overlay_findings: list[OverlayFinding] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

@@ -28,6 +28,7 @@ from typing import Any
 
 import anthropic
 
+from app.pipeline.compliance_overlays import apply_overlays, evaluate_overlays
 from app.pipeline.errors import OfacDataUnavailableError
 from app.pipeline.models import EvidencePipelineResult, StepError
 from app.pipeline.step1_parse import parse_alert
@@ -110,8 +111,9 @@ class EvidencePipeline:
 
         if screening.is_partial:
             logger.warning(
-                "  ⚠ step=screen PARTIAL — coverage_gaps=%s",
+                "  ⚠ step=screen PARTIAL — coverage_gaps=%s debug=%s",
                 screening.coverage_gaps,
+                screening.coverage_gaps_debug,
             )
         logger.info(
             "  ✓ step=screen entities=%d hits=%d sources=%s is_partial=%s",
@@ -125,7 +127,7 @@ class EvidencePipeline:
         logger.info("▶ step=4/5 analyze")
         analysis = analyze(parsed, gathered)
         logger.info(
-            "  ✓ step=analyze risk_score=%.3f action=%s patterns=%s",
+            "  ✓ step=analyze (pre-overlay) risk_score=%.3f action=%s patterns=%s",
             analysis.overall_risk_score,
             analysis.recommended_action,
             [
@@ -141,6 +143,16 @@ class EvidencePipeline:
             ],
         )
 
+        overlay_findings = evaluate_overlays(parsed, gathered, analysis)
+        if overlay_findings:
+            analysis = apply_overlays(analysis, overlay_findings)
+            logger.info(
+                "  ✓ compliance_overlays rules=%s risk_score=%.3f action=%s",
+                [f.rule_id for f in overlay_findings],
+                analysis.overall_risk_score,
+                analysis.recommended_action,
+            )
+
         # ── Assemble evidence package (deterministic) ────────────────────────
         evidence_items = build_evidence_package(parsed, gathered, screening, analysis)
         logger.info("  ✓ evidence_package size=%d", len(evidence_items))
@@ -153,6 +165,7 @@ class EvidencePipeline:
             self._client,
             coverage_gaps=screening.coverage_gaps if screening.is_partial else None,
             data_gaps=gathered.data_gaps if gathered.data_gaps else None,
+            analysis=analysis,
         )
 
         if screening.is_partial:
