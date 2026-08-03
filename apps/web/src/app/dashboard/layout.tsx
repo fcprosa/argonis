@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -11,28 +12,67 @@ const NAV_ITEMS = [
   { href: "/dashboard/settings", label: "Settings", icon: "⚙" },
 ];
 
+const FEEDBACK_EMAIL = "danielcamachorosa@gmail.com";
+
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const [pageUrl, setPageUrl] = useState("");
+
+  useEffect(() => {
+    setPageUrl(window.location.href);
+  }, [pathname]);
+
+  const isCaseDetail = /^\/dashboard\/cases\/[^/]+$/.test(pathname);
+
+  const pageMailto = `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(
+    "Argonis case link",
+  )}&body=${encodeURIComponent(pageUrl || pathname)}`;
 
   return (
     <>
-      {/* Mobile fallback — dashboard is desktop-first (≥1024px) */}
-      <div className="flex min-h-screen items-center justify-center bg-surface-base px-6 lg:hidden">
-        <div className="max-w-xs text-center">
-          <div className="mb-4 font-mono text-2xl text-accent-DEFAULT">⬡</div>
-          <p className="text-sm font-medium text-white">Desktop required</p>
-          <p className="mt-2 text-xs text-text-muted leading-relaxed">
-            Argonis is optimised for desktop browsers (1024px+). Please open
-            this page on a larger screen.
-          </p>
+      {/* Mobile gate — all dashboard routes except case detail */}
+      {!isCaseDetail && (
+        <div className="flex min-h-screen items-center justify-center bg-surface-base px-6 lg:hidden">
+          <div className="max-w-xs text-center">
+            <div className="mb-4 font-mono text-2xl text-accent-DEFAULT">⬡</div>
+            <p className="text-sm font-medium text-white">
+              The full investigation view is built for desktop
+            </p>
+            <p className="mt-2 text-xs text-text-muted leading-relaxed">
+              It includes the evidence-linked narrative and screening detail —
+              best on a bigger screen.
+            </p>
+            <a
+              href={pageMailto}
+              className="mt-5 inline-flex rounded bg-accent-DEFAULT px-4 py-2 text-xs font-semibold text-surface-base transition-opacity hover:opacity-90"
+            >
+              Email me the link
+            </a>
+            <div className="mt-4">
+              <Link
+                href="/sandbox"
+                className="text-xs font-medium text-accent-DEFAULT underline-offset-4 hover:underline"
+              >
+                Back to sandbox
+              </Link>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Desktop layout */}
+      {/* Mobile case detail — stacked read-only view lives in the page */}
+      {isCaseDetail && (
+        <div className="min-h-screen bg-surface-base lg:hidden">
+          <DemoModeBanner />
+          {children}
+        </div>
+      )}
+
+      {/* Desktop layout — unchanged */}
       <div className="hidden h-screen overflow-hidden bg-surface-base lg:flex">
         {/* Sidebar */}
         <aside className="flex w-[200px] shrink-0 flex-col border-r border-border bg-surface-1">

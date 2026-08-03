@@ -9,6 +9,7 @@ import type {
   SectionKey,
   CaseMetadata,
 } from "@/lib/types";
+import { trackEvidClick } from "@/lib/track";
 
 // ---------------------------------------------------------------------------
 // Section metadata — canonical ordering + display info for pipeline keys
@@ -54,6 +55,8 @@ interface Props {
   evidenceLinks: EvidenceLink[];
   overallConfidence: number | null;
   demoMode: boolean;
+  /** Offline demo OR (DEMO_MODE && no JWT) — disables Approve/Flag/Edit. */
+  demoReadOnly: boolean;
   caseMetadata?: CaseMetadata | null;
   onSectionApproved: () => Promise<void>;
 }
@@ -63,6 +66,7 @@ export function NarrativeViewer({
   evidenceLinks,
   overallConfidence,
   demoMode,
+  demoReadOnly,
   caseMetadata,
   onSectionApproved,
 }: Props) {
@@ -74,6 +78,7 @@ export function NarrativeViewer({
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [approvingKey, setApprovingKey] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [errorSectionKey, setErrorSectionKey] = useState<string | null>(null);
 
   // Build a map of section_key → section for O(1) lookup
   const sectionMap = useMemo(() => {
@@ -101,18 +106,11 @@ export function NarrativeViewer({
   // Approve / reject
   // ---------------------------------------------------------------------------
   async function handleApprove(section: NarrativeSection, action: "approve" | "reject") {
-    if (demoMode) {
-      setSections((prev) =>
-        prev.map((s) =>
-          s.section_key === section.section_key
-            ? { ...s, approval_status: action === "approve" ? "approved" : "rejected" }
-            : s,
-        ),
-      );
-      return;
-    }
+    if (demoReadOnly) return;
 
     setApprovingKey(section.section_key);
+    setSaveError(null);
+    setErrorSectionKey(null);
     try {
       await approveNarrativeSections(narrative.id, {
         section_keys: [section.section_key],
@@ -120,7 +118,10 @@ export function NarrativeViewer({
       });
       await onSectionApproved();
     } catch (err) {
-      console.error("Approval failed:", err);
+      setErrorSectionKey(section.section_key);
+      setSaveError(
+        err instanceof Error ? err.message : "Approval failed",
+      );
     } finally {
       setApprovingKey(null);
     }
@@ -130,26 +131,19 @@ export function NarrativeViewer({
   // Edit
   // ---------------------------------------------------------------------------
   function startEdit(section: NarrativeSection) {
+    if (demoReadOnly) return;
     setEditingKey(section.section_key);
     setEditDraft(section.content);
     setSaveError(null);
+    setErrorSectionKey(null);
   }
 
   async function saveEdit(section: NarrativeSection) {
-    if (demoMode) {
-      setSections((prev) =>
-        prev.map((s) =>
-          s.section_key === section.section_key
-            ? { ...s, content: editDraft, approval_status: "pending" }
-            : s,
-        ),
-      );
-      setEditingKey(null);
-      return;
-    }
+    if (demoReadOnly) return;
 
     setSavingKey(section.section_key);
     setSaveError(null);
+    setErrorSectionKey(null);
     try {
       const updated = await editNarrativeSection(
         narrative.id,
@@ -161,6 +155,7 @@ export function NarrativeViewer({
       );
       setEditingKey(null);
     } catch (err) {
+      setErrorSectionKey(section.section_key);
       setSaveError(
         err instanceof Error ? err.message : "Save failed",
       );
@@ -265,7 +260,13 @@ export function NarrativeViewer({
             isSaving={savingKey === section.section_key}
             isApproving={approvingKey === section.section_key}
             editDraft={editDraft}
-            saveError={editingKey === section.section_key ? saveError : null}
+            saveError={
+              errorSectionKey === section.section_key ||
+              editingKey === section.section_key
+                ? saveError
+                : null
+            }
+            demoReadOnly={demoReadOnly}
             onApprove={(action) => handleApprove(section, action)}
             onStartEdit={() => startEdit(section)}
             onSaveEdit={() => saveEdit(section)}
@@ -291,7 +292,13 @@ export function NarrativeViewer({
               isSaving={savingKey === section.section_key}
               isApproving={approvingKey === section.section_key}
               editDraft={editDraft}
-              saveError={editingKey === section.section_key ? saveError : null}
+              saveError={
+                errorSectionKey === section.section_key ||
+                editingKey === section.section_key
+                  ? saveError
+                  : null
+              }
+              demoReadOnly={demoReadOnly}
               onApprove={(action) => handleApprove(section, action)}
               onStartEdit={() => startEdit(section)}
               onSaveEdit={() => saveEdit(section)}
@@ -328,6 +335,7 @@ function SectionCard({
   isApproving,
   editDraft,
   saveError,
+  demoReadOnly,
   onApprove,
   onStartEdit,
   onSaveEdit,
@@ -344,6 +352,7 @@ function SectionCard({
   isApproving: boolean;
   editDraft: string;
   saveError: string | null;
+  demoReadOnly: boolean;
   onApprove: (action: "approve" | "reject") => void;
   onStartEdit: () => void;
   onSaveEdit: () => void;
@@ -437,65 +446,107 @@ function SectionCard({
 
       {/* Section footer — actions */}
       {!isEditing && (
-        <div className="flex items-center justify-between border-t border-gray-100 px-5 py-2.5">
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => onApprove("approve")}
-              disabled={
-                isApproving ||
-                section.approval_status === "approved" ||
-                hasInsufficient
-              }
-              title={
-                hasInsufficient
-                  ? "Resolve INSUFFICIENT EVIDENCE before approving"
-                  : "Approve section"
-              }
-              className={[
-                "rounded px-3 py-1 text-xs font-semibold transition-colors",
-                section.approval_status === "approved"
-                  ? "bg-green-100 text-green-700 cursor-default"
-                  : hasInsufficient
-                    ? "bg-gray-50 text-gray-300 cursor-not-allowed"
-                    : "bg-green-50 text-green-700 hover:bg-green-100",
-              ].join(" ")}
-            >
-              {isApproving ? "…" : section.approval_status === "approved" ? "Approved" : "Approve"}
-            </button>
-
-            <button
-              onClick={() => onApprove("reject")}
-              disabled={isApproving || section.approval_status === "rejected"}
-              className={[
-                "rounded px-3 py-1 text-xs font-semibold transition-colors",
-                section.approval_status === "rejected"
-                  ? "bg-red-100 text-red-700 cursor-default"
-                  : "bg-gray-50 text-gray-500 hover:bg-red-50 hover:text-red-600",
-              ].join(" ")}
-            >
-              {section.approval_status === "rejected" ? "Flagged" : "Flag"}
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3 text-[10px] text-gray-400">
-            <button
-              onClick={onStartEdit}
-              className="hover:text-gray-700 transition-colors"
-            >
-              Edit
-            </button>
-            {section.approved_by && section.approved_at && (
-              <span>
-                {section.approval_status === "approved" ? "Approved" : "Updated"}{" "}
-                {new Date(section.approved_at).toLocaleString("en-GB", {
-                  day: "numeric",
-                  month: "short",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+        <div className="border-t border-gray-100 px-5 py-2.5">
+          {demoReadOnly ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled
+                className="cursor-not-allowed rounded bg-gray-50 px-3 py-1 text-xs font-semibold text-gray-300"
+              >
+                Approve
+              </button>
+              <button
+                type="button"
+                disabled
+                className="cursor-not-allowed rounded bg-gray-50 px-3 py-1 text-xs font-semibold text-gray-300"
+              >
+                Flag
+              </button>
+              <button
+                type="button"
+                disabled
+                className="cursor-not-allowed text-[10px] text-gray-300"
+              >
+                Edit
+              </button>
+              <span className="ml-auto text-[10px] font-medium text-amber-700">
+                Demo — read only
               </span>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => onApprove("approve")}
+                  disabled={
+                    isApproving ||
+                    section.approval_status === "approved" ||
+                    hasInsufficient
+                  }
+                  title={
+                    hasInsufficient
+                      ? "Resolve INSUFFICIENT EVIDENCE before approving"
+                      : "Approve section"
+                  }
+                  className={[
+                    "rounded px-3 py-1 text-xs font-semibold transition-colors",
+                    section.approval_status === "approved"
+                      ? "bg-green-100 text-green-700 cursor-default"
+                      : hasInsufficient
+                        ? "bg-gray-50 text-gray-300 cursor-not-allowed"
+                        : "bg-green-50 text-green-700 hover:bg-green-100",
+                  ].join(" ")}
+                >
+                  {isApproving
+                    ? "…"
+                    : section.approval_status === "approved"
+                      ? "Approved"
+                      : "Approve"}
+                </button>
+
+                <button
+                  onClick={() => onApprove("reject")}
+                  disabled={
+                    isApproving || section.approval_status === "rejected"
+                  }
+                  className={[
+                    "rounded px-3 py-1 text-xs font-semibold transition-colors",
+                    section.approval_status === "rejected"
+                      ? "bg-red-100 text-red-700 cursor-default"
+                      : "bg-gray-50 text-gray-500 hover:bg-red-50 hover:text-red-600",
+                  ].join(" ")}
+                >
+                  {section.approval_status === "rejected" ? "Flagged" : "Flag"}
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3 text-[10px] text-gray-400">
+                <button
+                  onClick={onStartEdit}
+                  className="hover:text-gray-700 transition-colors"
+                >
+                  Edit
+                </button>
+                {section.approved_by && section.approved_at && (
+                  <span>
+                    {section.approval_status === "approved"
+                      ? "Approved"
+                      : "Updated"}{" "}
+                    {new Date(section.approved_at).toLocaleString("en-GB", {
+                      day: "numeric",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+          {saveError && !isEditing && (
+            <p className="mt-2 text-xs text-red-600">{saveError}</p>
+          )}
         </div>
       )}
     </div>
@@ -584,6 +635,7 @@ function EvidencePill({
       type="button"
       title={title ?? evidenceId}
       onClick={() => {
+        trackEvidClick();
         window.dispatchEvent(
           new CustomEvent("argonis:highlight-evidence", {
             detail: { evidenceId },

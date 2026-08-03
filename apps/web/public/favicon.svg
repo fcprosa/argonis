@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Argonis">
+  <rect width="32" height="32" rx="6" fill="#0A0A0A"/>
+  <!-- Brand hexagon (same mark as the desktop-required gate) -->
+  <path
+    d="M16 5.5 L25.5 11 L25.5 21 L16 26.5 L6.5 21 L6.5 11 Z"
+    fill="none"
+    stroke="#E8FF4D"
+    stroke-width="2"
+    stroke-linejoin="round"
+  />
+</svg>

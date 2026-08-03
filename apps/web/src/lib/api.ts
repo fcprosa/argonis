@@ -15,9 +15,16 @@ const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /** Read the Supabase JWT stored after login. */
-function getToken(): string | null {
+export function getToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("argonis_token");
+}
+
+/** Offline sample OR unauthenticated demo visitor (DEMO_MODE, no JWT). */
+export function isDemoReadOnly(offlineDemo: boolean): boolean {
+  if (offlineDemo) return true;
+  if (process.env.NEXT_PUBLIC_DEMO_MODE !== "true") return false;
+  return !getToken();
 }
 
 function mergeAuthHeaders(init?: HeadersInit): Headers {

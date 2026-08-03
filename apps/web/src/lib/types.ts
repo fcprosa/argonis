@@ -22,6 +22,14 @@ export interface CaseSummary {
     | "escalate"
     | "file_sar"
     | null;
+  /** Enforcement framing from demo seed; is_featured pins gallery highlight. */
+  source_metadata?: {
+    is_featured?: boolean;
+    source_name?: string;
+    source_url?: string;
+    regulator?: string;
+    [key: string]: unknown;
+  } | null;
 }
 
 export interface InvestigationStep {
@@ -121,6 +129,8 @@ export interface CaseDetail {
     created_by: string;
     created_at: string;
     updated_at: string;
+    /** Enforcement framing from demo seed; present when API select includes it. */
+    source_metadata?: CaseSummary["source_metadata"];
   };
   investigation_steps: InvestigationStep[];
   screening_results: ScreeningResult[];
